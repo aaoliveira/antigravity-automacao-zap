@@ -10,6 +10,10 @@
   "scripts": {
     "dev:backend": "npm run start:dev --workspace=backend",
     "dev:frontend": "npm run dev --workspace=frontend",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:infra": "docker compose up postgres redis evolution-api -d",
+    "docker:stop:apps": "docker compose stop backend frontend",
     "build:backend": "npm run build --workspace=backend",
     "build:frontend": "npm run build --workspace=frontend",
     "build": "npm run build:backend && npm run build:frontend",

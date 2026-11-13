@@ -261,9 +261,17 @@ Esta opção inicia toda a infraestrutura (PostgreSQL 16, Redis 7, Evolution API
 
 Ideal para desenvolvimento ativo no código com **hot-reloading instantâneo** no frontend e backend.
 
+> [!NOTE]
+> Se você já havia executado `docker compose up -d` com todos os containers, pare primeiro os containers das aplicações para liberar as portas 3000 e 3001 no host:
+> ```bash
+> npm run docker:stop:apps
+> # ou: docker compose stop backend frontend
+> ```
+
 1. **Inicie apenas os serviços de infraestrutura via Docker:**
    ```bash
-   docker compose up postgres redis evolution-api -d
+   npm run docker:infra
+   # ou: docker compose up postgres redis evolution-api -d
    ```
 
 2. **Instale as dependências locais:**
