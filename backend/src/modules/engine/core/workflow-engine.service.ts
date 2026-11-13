@@ -83,8 +83,8 @@ export class WorkflowEngineService {
         }
       }
 
-      // 4.2 Cenário B: Nenhuma sessão ativa -> Avalia gatilhos para iniciar novo fluxo
-      const matchedTrigger = await this.matchTrigger(tenantId, event.interaction.value);
+      // 4.2 Cenário B: Nenhuma sessão ativa -> Avalia gatilhos para iniciar novo fluxo com prioridade
+      const matchedTrigger = await this.matchTrigger(tenantId, event.interaction.value, contactPhone);
       if (!matchedTrigger) {
         this.logger.debug(`Nenhum gatilho ativado para a mensagem recebida: "${event.interaction.value}"`);
         return { processed: false, reason: 'no_trigger_matched' };
@@ -120,7 +120,10 @@ export class WorkflowEngineService {
   ) {
     const definition = flowVersion.definition as unknown as WorkflowDefinition;
     const triggerNode = definition.nodes.find(
-      (n) => (n.type as string) === 'trigger' || (n.type as string) === 'trigger.message_received',
+      (n) =>
+        (n.type as string) === 'trigger' ||
+        (n.type as string).startsWith('trigger.') ||
+        (n.type as string).startsWith('trigger_'),
     );
 
     if (!triggerNode) {
@@ -264,7 +267,7 @@ export class WorkflowEngineService {
           return this.outboxService.recordOutgoingMessage(
             variableContext.company.id,
             executionId,
-            'whatsapp-default',
+            variableContext.execution.instanceName || 'whatsapp-default',
             recipient,
             msgType,
             payload,
@@ -465,9 +468,14 @@ export class WorkflowEngineService {
   }
 
   /**
-   * Avalia os gatilhos cadastrados para encontrar o fluxo a disparar
+   * Avalia os gatilhos cadastrados com priorização estrita:
+   * 1. KEYWORD_EXACT
+   * 2. KEYWORD_CONTAINS
+   * 3. REGEX
+   * 4. FIRST_INTERACTION
+   * 5. ANY_MESSAGE
    */
-  private async matchTrigger(tenantId: string, text: string) {
+  private async matchTrigger(tenantId: string, text: string, contactPhone?: string) {
     const rawText = (text || '').trim().toLowerCase();
 
     const triggers = await this.prisma.automationTrigger.findMany({
@@ -484,20 +492,24 @@ export class WorkflowEngineService {
       },
     });
 
+    const TRIGGER_PRIORITY: Record<string, number> = {
+      KEYWORD_EXACT: 1,
+      KEYWORD_CONTAINS: 2,
+      REGEX: 3,
+      FIRST_INTERACTION: 4,
+      ANY_MESSAGE: 5,
+    };
+
+    // Ordena os gatilhos por nível de especificidade e prioridade
+    triggers.sort(
+      (a, b) => (TRIGGER_PRIORITY[a.type] || 99) - (TRIGGER_PRIORITY[b.type] || 99),
+    );
+
     for (const trigger of triggers) {
       const cfg = (trigger.config || {}) as any;
       let matched = false;
 
       switch (trigger.type) {
-        case 'ANY_MESSAGE':
-          matched = true;
-          break;
-
-        case 'FIRST_INTERACTION':
-          // Em mock ou caso geral
-          matched = true;
-          break;
-
         case 'KEYWORD_EXACT': {
           const keywords = Array.isArray(cfg.keywords) ? cfg.keywords : [];
           matched = keywords.some((k: string) => k.toLowerCase().trim() === rawText);
@@ -521,6 +533,22 @@ export class WorkflowEngineService {
           }
           break;
         }
+
+        case 'FIRST_INTERACTION': {
+          if (contactPhone) {
+            const previousCount = await this.prisma.flowExecution.count({
+              where: { tenantId, contactPhone },
+            });
+            matched = previousCount === 0;
+          } else {
+            matched = true;
+          }
+          break;
+        }
+
+        case 'ANY_MESSAGE':
+          matched = true;
+          break;
       }
 
       if (matched && trigger.automation.activeVersionId) {
@@ -590,6 +618,7 @@ export class WorkflowEngineService {
         startedAt: execution?.startedAt || new Date(),
         currentNodeId: execution?.currentNodeId,
         variables: { ...initialVars },
+        instanceName: execution?.instanceName,
       },
       company: {
         id: automation.tenantId,

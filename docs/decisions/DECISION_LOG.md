@@ -162,3 +162,27 @@
   - Travas distribuídas no Redis (`ConcurrencyLockService`) por conversa e filtro de idempotência (`IdempotencyService`).
 - **Consequências:**
   - Positivas: Execuções 100% autônomas no servidor, garantia contra envios duplicados, ausência de race conditions e cobertura integral comprovada por 67 testes automatizados verdes.
+
+---
+
+## ADR-010: Integração com Evolution API v2, Matriz de Capacidades e Roteamento de Webhooks
+
+- **Status:** Aprovado e Implementado
+- **Data:** 2026-11-13
+- **Contexto:**
+  O Prompt 04 exigiu a integração do Workflow Execution Engine com a Evolution API v2, permitindo que mensagens e interações reais do WhatsApp iniciem e alimentem as automações. Era necessário implementar abstração agnóstica de provedor (`WhatsAppProvider`), adapter oficial da Evolution API v2 sem inventar endpoints, matriz de capacidades por conexão (`BAILEYS` vs `CLOUD_API`) com fallback automático, recebimento e deduplicação de webhooks com auditoria prévia (`WebhookEvent`), normalização de eventos, priorização estrita de gatilhos, envio com validação de janela de 24h e criptografia de credenciais via AES-256-GCM.
+- **Decisão:**
+  - **Abstração do Provedor (`WhatsAppProvider`):** Criada a interface `WhatsAppProvider` e os adapters `EvolutionApiV2Adapter` (para produção/integração real contra a Evolution API v2) e `MockWhatsAppProvider` (para testes unitários e de integração determinísticos sem depender de rede externa).
+  - **Matriz de Capacidades (`WhatsAppCapabilitiesService`):** Diferenciação formal entre `BAILEYS` e `CLOUD_API`. Se uma conexão Baileys for acionada para nós interativos (botões ou listas), aplica-se automaticamente a conversão para menu textual numerado/estruturado com emojis e instruções claras de resposta, garantindo entrega visível em qualquer smartphone.
+  - **Validação de Fluxos com Capacidades:** O `FlowValidatorService` valida incompatibilidades estritas (ex: nó de `template` oficial em conexões Baileys é rejeitado com erro; nós de botões em Baileys emitem aviso de fallback aplicado).
+  - **Persistência Prévia de Webhooks (`WebhookEvent`):** Todo evento recebido é imediatamente gravado no banco antes de qualquer processamento assíncrono com status inicial `PENDING`, garantindo rastreabilidade e auditoria completa de payloads externos.
+  - **Normalização de Eventos (`EventNormalizerService`):** Conversão uniforme de payloads da Evolution API (`messages.upsert`, `messages.update`) para o modelo desacoplado `NormalizedMessageEvent`, suportando texto, mídia, botões, listas, enquetes e atualizações de entrega (ACKs).
+  - **Roteamento Inteligente e Priorização de Gatilhos:**
+    1. Mensagens da própria empresa (`fromMe: true`) são ignoradas para acionamento de fluxos para evitar loops infinitos.
+    2. Eventos de status (`messages.update` - DELIVERY_ACK, READ) atualizam o registro de `OutboxMessage`.
+    3. Para mensagens recebidas de clientes: se houver sessão ativa em `WAITING_FOR_INPUT`, a execução é retomada imediatamente. Caso contrário, avaliam-se os gatilhos cadastrados na ordem de prioridade estrita: `KEYWORD_EXACT` (1) > `KEYWORD_CONTAINS` (2) > `REGEX` (3) > `FIRST_INTERACTION` (4) > `ANY_MESSAGE` (5).
+  - **Segurança e Criptografia (`CryptoService`):** Chaves de API das instâncias são armazenadas no PostgreSQL criptografadas com AES-256-GCM usando chave mestra (`ENCRYPTION_MASTER_KEY`). As APIs nunca retornam chaves em texto aberto, aplicando mascaramento inteligente (`maskApiKey`). Os endpoints de webhook são protegidos por `WhatsAppWebhookGuard`.
+  - **Despacho Outbox (`WhatsAppOutboxDispatcherService`):** Conectado ao `OutboxService`, valida capacidades, verifica a janela de 24h da Meta para Cloud API, persiste `providerMessageId` e atualiza estados para `SENT` ou `FAILED`.
+- **Consequências:**
+  - Positivas: Conexão real e resiliente com o WhatsApp, suporte completo a fluxos conversacionais bidirecionais ponta a ponta, total conformidade com a Evolution API v2 e validação integral com 96 testes automatizados verdes (61 unitários + 35 E2E).
+

@@ -76,6 +76,18 @@ enum OutboxStatus {
   FAILED
 }
 
+enum WhatsAppProviderType {
+  BAILEYS
+  CLOUD_API
+}
+
+enum WebhookEventStatus {
+  PENDING
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
 // ==========================================
 // 1. TENANT E USUÁRIOS (MULTI-TENANCY)
 // ==========================================
@@ -99,6 +111,7 @@ model Tenant {
   contacts         Contact[]
   whatsappInstances WhatsAppInstance[]
   outboxMessages   OutboxMessage[]
+  webhookEvents    WebhookEvent[]
 
   @@map("tenants")
 }
@@ -125,15 +138,21 @@ model User {
 // ==========================================
 
 model WhatsAppInstance {
-  id           String   @id @default(uuid()) @db.Uuid
-  tenantId     String   @db.Uuid
-  instanceName String   @db.VarChar(100)
-  phoneNumber  String?  @db.VarChar(50)
-  status       String   @default("CONNECTED") @db.VarChar(50)
-  createdAt    DateTime @default(now()) @db.Timestamptz
-  updatedAt    DateTime @updatedAt @db.Timestamptz
+  id              String               @id @default(uuid()) @db.Uuid
+  tenantId        String               @db.Uuid
+  instanceName    String               @db.VarChar(100)
+  phoneNumber     String?              @db.VarChar(50)
+  providerType    WhatsAppProviderType @default(BAILEYS)
+  serverUrl       String?              @db.VarChar(255)
+  apiKeyEncrypted String?              @db.Text
+  webhookSecret   String?              @db.VarChar(255)
+  status          String               @default("CONNECTED") @db.VarChar(50)
+  capabilities    Json?
+  createdAt       DateTime             @default(now()) @db.Timestamptz
+  updatedAt       DateTime             @updatedAt @db.Timestamptz
 
-  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant          Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  webhookEvents   WebhookEvent[]
 
   @@unique([tenantId, instanceName])
   @@index([tenantId])
@@ -141,17 +160,18 @@ model WhatsAppInstance {
 }
 
 model Contact {
-  id           String          @id @default(uuid()) @db.Uuid
-  tenantId     String          @db.Uuid
-  phone        String          @db.VarChar(50)
-  name         String?         @db.VarChar(255)
-  tags         String[]        @default([])
-  customFields Json?           @default("{}")
-  createdAt    DateTime        @default(now()) @db.Timestamptz
-  updatedAt    DateTime        @updatedAt @db.Timestamptz
+  id                String          @id @default(uuid()) @db.Uuid
+  tenantId          String          @db.Uuid
+  phone             String          @db.VarChar(50)
+  name              String?         @db.VarChar(255)
+  tags              String[]        @default([])
+  customFields      Json?           @default("{}")
+  lastInteractionAt DateTime?       @db.Timestamptz
+  createdAt         DateTime        @default(now()) @db.Timestamptz
+  updatedAt         DateTime        @updatedAt @db.Timestamptz
 
-  tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  executions   FlowExecution[]
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  executions        FlowExecution[]
 
   @@unique([tenantId, phone])
   @@index([tenantId])
@@ -326,23 +346,51 @@ model FlowExecutionLog {
 // ==========================================
 
 model OutboxMessage {
-  id           String       @id @default(uuid()) @db.Uuid
-  tenantId     String       @db.Uuid
-  executionId  String?      @db.Uuid
-  instanceName String       @db.VarChar(100)
-  recipient    String       @db.VarChar(50)
-  messageType  String       @db.VarChar(50) // text, media, buttons, list, etc.
-  payload      Json
-  status       OutboxStatus @default(PENDING)
-  attempts     Int          @default(0)
-  lastError    String?      @db.Text
-  sentAt       DateTime?    @db.Timestamptz
-  createdAt    DateTime     @default(now()) @db.Timestamptz
-  updatedAt    DateTime     @updatedAt @db.Timestamptz
+  id                String       @id @default(uuid()) @db.Uuid
+  tenantId          String       @db.Uuid
+  executionId       String?      @db.Uuid
+  instanceName      String       @db.VarChar(100)
+  recipient         String       @db.VarChar(50)
+  messageType       String       @db.VarChar(50) // text, media, buttons, list, etc.
+  payload           Json
+  status            OutboxStatus @default(PENDING)
+  attempts          Int          @default(0)
+  lastError         String?      @db.Text
+  providerMessageId String?      @db.VarChar(100)
+  providerResponse  Json?
+  sentAt            DateTime?    @db.Timestamptz
+  createdAt         DateTime     @default(now()) @db.Timestamptz
+  updatedAt         DateTime     @updatedAt @db.Timestamptz
 
-  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant            Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([status, createdAt])
   @@index([tenantId])
   @@map("outbox_messages")
+}
+
+// ==========================================
+// 7. EVENTOS DE WEBHOOK (RAW LOG & AUDIT)
+// ==========================================
+
+model WebhookEvent {
+  id           String             @id @default(uuid()) @db.Uuid
+  tenantId     String             @db.Uuid
+  instanceId   String?            @db.Uuid
+  instanceName String             @db.VarChar(100)
+  eventType    String             @db.VarChar(100)
+  externalId   String?            @db.VarChar(100)
+  payload      Json
+  status       WebhookEventStatus @default(PENDING)
+  errorMessage String?            @db.Text
+  processedAt  DateTime?          @db.Timestamptz
+  createdAt    DateTime           @default(now()) @db.Timestamptz
+
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  instance     WhatsAppInstance?  @relation(fields: [instanceId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([externalId])
+  @@index([status])
+  @@map("webhook_events")
 }

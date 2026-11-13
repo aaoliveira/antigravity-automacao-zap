@@ -4,57 +4,57 @@
 
 export type FlowNodeType =
   // Formato com underscore (Prompt 01 / Typebot / n8n)
-  | 'trigger'
-  | 'message_text'
-  | 'message_media'
-  | 'buttons'
-  | 'list_interactive'
-  | 'question_input'
-  | 'condition'
-  | 'switch'
-  | 'delay'
-  | 'wait_reply'
-  | 'set_variable'
-  | 'human_transfer'
-  | 'end_flow'
+  | "trigger"
+  | "message_text"
+  | "message_media"
+  | "buttons"
+  | "list_interactive"
+  | "question_input"
+  | "condition"
+  | "switch"
+  | "delay"
+  | "wait_reply"
+  | "set_variable"
+  | "human_transfer"
+  | "end_flow"
   // Formato pontilhado (Prompt 03 - Domínio e Catálogo de Execução)
-  | 'trigger.message_received'
-  | 'trigger.keyword'
-  | 'message.text'
-  | 'message.image'
-  | 'message.video'
-  | 'message.audio'
-  | 'message.document'
-  | 'message.sticker'
-  | 'message.location'
-  | 'message.contact'
-  | 'message.buttons'
-  | 'message.list'
-  | 'message.template'
-  | 'interaction.question'
-  | 'interaction.capture'
-  | 'interaction.choice'
-  | 'logic.condition'
-  | 'logic.switch'
-  | 'logic.delay'
-  | 'logic.wait_for_input'
-  | 'action.add_tag'
-  | 'action.remove_tag'
-  | 'action.update_contact'
-  | 'action.start_flow'
-  | 'action.human_handoff'
-  | 'action.end';
+  | "trigger.message_received"
+  | "trigger.keyword"
+  | "message.text"
+  | "message.image"
+  | "message.video"
+  | "message.audio"
+  | "message.document"
+  | "message.sticker"
+  | "message.location"
+  | "message.contact"
+  | "message.buttons"
+  | "message.list"
+  | "message.template"
+  | "interaction.question"
+  | "interaction.capture"
+  | "interaction.choice"
+  | "logic.condition"
+  | "logic.switch"
+  | "logic.delay"
+  | "logic.wait_for_input"
+  | "action.add_tag"
+  | "action.remove_tag"
+  | "action.update_contact"
+  | "action.start_flow"
+  | "action.human_handoff"
+  | "action.end";
 
 // ----------------------------------------------------------------------------
 // 1. Configurações Específicas por Tipo de Nó
 // ----------------------------------------------------------------------------
 
 export type TriggerKind =
-  | 'exact_keyword'
-  | 'contains_keyword'
-  | 'regex'
-  | 'first_interaction'
-  | 'any_message';
+  | "exact_keyword"
+  | "contains_keyword"
+  | "regex"
+  | "first_interaction"
+  | "any_message";
 
 export interface TriggerNodeConfig {
   triggerType: TriggerKind;
@@ -69,7 +69,7 @@ export interface MessageTextNodeConfig {
 }
 
 export interface MessageMediaNodeConfig {
-  mediaType: 'image' | 'audio' | 'video' | 'document';
+  mediaType: "image" | "audio" | "video" | "document";
   mediaUrl: string;
   caption?: string;
   fileName?: string;
@@ -111,21 +111,21 @@ export interface ListInteractiveNodeConfig {
 export interface QuestionInputNodeConfig {
   questionText: string;
   targetVariable: string;
-  expectedType: 'text' | 'number' | 'email' | 'phone' | 'regex';
+  expectedType: "text" | "number" | "email" | "phone" | "regex";
   validationRegex?: string;
   customErrorMessage?: string;
   maxRetries?: number;
 }
 
 export type ConditionOperator =
-  | 'equals'
-  | 'not_equals'
-  | 'contains'
-  | 'greater_than'
-  | 'less_than'
-  | 'regex_match'
-  | 'is_empty'
-  | 'is_not_empty';
+  | "equals"
+  | "not_equals"
+  | "contains"
+  | "greater_than"
+  | "less_than"
+  | "regex_match"
+  | "is_empty"
+  | "is_not_empty";
 
 export interface ConditionRule {
   variable: string;
@@ -134,7 +134,7 @@ export interface ConditionRule {
 }
 
 export interface ConditionNodeConfig {
-  logicalOperator: 'AND' | 'OR';
+  logicalOperator: "AND" | "OR";
   rules: ConditionRule[];
 }
 
@@ -150,7 +150,7 @@ export interface SwitchNodeConfig {
 
 export interface DelayNodeConfig {
   durationSeconds: number;
-  simulatePresence?: 'composing' | 'recording' | 'none';
+  simulatePresence?: "composing" | "recording" | "none";
 }
 
 export interface WaitReplyNodeConfig {
@@ -159,7 +159,7 @@ export interface WaitReplyNodeConfig {
 
 export interface SetVariableNodeConfig {
   variableName: string;
-  operation: 'set' | 'increment' | 'decrement' | 'clear';
+  operation: "set" | "increment" | "decrement" | "clear";
   expression: string;
 }
 
@@ -210,7 +210,7 @@ export interface FlowEdge {
 
 export interface FlowVariableDeclaration {
   name: string;
-  type: 'string' | 'number' | 'boolean' | 'json';
+  type: "string" | "number" | "boolean" | "json";
   description?: string;
   defaultValue?: any;
 }

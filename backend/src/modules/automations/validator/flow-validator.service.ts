@@ -39,7 +39,10 @@ export class FlowValidatorService {
   /**
    * Valida integralmente um fluxo de automação conversacional
    */
-  validate(definition: WorkflowDefinition): FlowValidationResult {
+  validate(
+    definition: WorkflowDefinition,
+    options?: { capabilities?: any; allowFallback?: boolean },
+  ): FlowValidationResult {
     const errors: ValidationErrorDetail[] = [];
     const warnings: ValidationErrorDetail[] = [];
 
@@ -99,6 +102,55 @@ export class FlowValidatorService {
 
       // 2.3 Validação de configurações por tipo de nó
       this.validateNodeConfig(node, errors, warnings, declaredVariables);
+
+      // 2.4 Validação de compatibilidade com capacidades do provedor selecionado
+      if (options?.capabilities) {
+        const caps = options.capabilities;
+        if ((normType === 'template' || (node.type as string) === 'message.template') && !caps.template) {
+          errors.push({
+            nodeId: node.id,
+            field: 'type',
+            message: `Nó de modelo pré-aprovado (Template) não é suportado pelo provedor ${caps.providerType || 'selecionado'}.`,
+            code: 'INCOMPATIBLE_CAPABILITY',
+          });
+        }
+
+        if ((normType === 'buttons' || (node.type as string) === 'message.buttons') && !caps.buttons) {
+          if (options.allowFallback === false) {
+            errors.push({
+              nodeId: node.id,
+              field: 'type',
+              message: `Nó de botões nativos incompatível com a conexão ${caps.providerType}.`,
+              code: 'INCOMPATIBLE_CAPABILITY',
+            });
+          } else {
+            warnings.push({
+              nodeId: node.id,
+              field: 'type',
+              message: `A conexão ${caps.providerType} não renderiza botões nativos. Será aplicado fallback para menu textual numerado.`,
+              code: 'CAPABILITY_FALLBACK_APPLIED',
+            });
+          }
+        }
+
+        if ((normType === 'list' || (node.type as string) === 'message.list') && !caps.list) {
+          if (options.allowFallback === false) {
+            errors.push({
+              nodeId: node.id,
+              field: 'type',
+              message: `Nó de lista interativa incompatível com a conexão ${caps.providerType}.`,
+              code: 'INCOMPATIBLE_CAPABILITY',
+            });
+          } else {
+            warnings.push({
+              nodeId: node.id,
+              field: 'type',
+              message: `A conexão ${caps.providerType} não renderiza listas interativas. Será aplicado fallback para menu textual estruturado.`,
+              code: 'CAPABILITY_FALLBACK_APPLIED',
+            });
+          }
+        }
+      }
     }
 
     // 3. Ausência de nó de gatilho

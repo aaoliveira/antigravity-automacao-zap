@@ -12,7 +12,8 @@ export class InteractionQuestionHandler implements WorkflowNodeHandler {
 
   async execute(context: NodeExecutionContext): Promise<NodeResult> {
     const config = context.node.config || {};
-    const targetVariable = config.targetVariable || 'input_response';
+    const targetVariable =
+      config.targetVariable || config.saveVariable || config.variableName || 'input_response';
 
     // FASE 2: Retomada com a resposta do cliente
     if (context.incomingInteraction) {
@@ -50,7 +51,7 @@ export class InteractionQuestionHandler implements WorkflowNodeHandler {
     }
 
     // FASE 1: Disparo da pergunta e pausa
-    const rawQuestion = config.questionText || '';
+    const rawQuestion = config.questionText || config.question || config.text || '';
     const questionText = this.variableResolver.interpolate(rawQuestion, context.variables);
 
     if (context.outboxMessage) {

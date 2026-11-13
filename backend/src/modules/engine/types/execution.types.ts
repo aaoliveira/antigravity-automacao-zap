@@ -42,6 +42,7 @@ export interface VariableContext {
     startedAt: Date;
     currentNodeId?: string;
     variables: Record<string, any>;
+    instanceName?: string;
   };
   company: {
     id: string;

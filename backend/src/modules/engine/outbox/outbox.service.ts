@@ -3,7 +3,12 @@ import { PrismaService } from '../../database/prisma.service';
 import { OutboxStatus } from '@prisma/client';
 
 export interface MessageSender {
-  sendMessage(instanceName: string, recipient: string, messageType: string, payload: any): Promise<{ messageId: string }>;
+  sendMessage(
+    instanceName: string,
+    recipient: string,
+    messageType: string,
+    payload: any,
+  ): Promise<{ messageId: string; providerResponse?: any }>;
 }
 
 @Injectable()
@@ -68,13 +73,18 @@ export class OutboxService {
     });
 
     try {
+      let providerMessageId: string | undefined;
+      let providerResponse: any = undefined;
+
       if (this.customSender) {
-        await this.customSender.sendMessage(
+        const sendResult = await this.customSender.sendMessage(
           message.instanceName,
           message.recipient,
           message.messageType,
           message.payload,
         );
+        providerMessageId = sendResult?.messageId;
+        providerResponse = sendResult?.providerResponse;
       } else {
         // Simulação padrão em desenvolvimento local
         this.logger.log(
@@ -88,6 +98,8 @@ export class OutboxService {
         data: {
           status: OutboxStatus.SENT,
           sentAt: new Date(),
+          providerMessageId,
+          providerResponse,
         },
       });
 
