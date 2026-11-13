@@ -1,22 +1,39 @@
-import { Controller, Post, Body, Param, HttpCode, HttpStatus, Header } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
+import {
+  Controller,
+  Post,
+  Body,
+  Param,
+  HttpCode,
+  HttpStatus,
+  UseGuards,
+  ForbiddenException,
+} from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiSecurity } from '@nestjs/swagger';
 import { WorkflowEngineService } from './core/workflow-engine.service';
 import { InboundEvent } from './types/execution.types';
+import { TenantGuard } from '../../common/guards/tenant.guard';
+import { CurrentTenant } from '../../common/decorators/current-tenant.decorator';
 
 @ApiTags('Workflow Engine')
+@ApiSecurity('tenant-id')
+@UseGuards(TenantGuard)
 @Controller('engine')
 export class EngineController {
   constructor(private readonly engineService: WorkflowEngineService) {}
 
   @Post('webhook/:tenantId')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Recebimento de webhook de mensagens recebidas do WhatsApp' })
+  @ApiOperation({ summary: 'Recebimento de webhook interno de mensagens recebidas do WhatsApp' })
   @ApiParam({ name: 'tenantId', description: 'ID da empresa/tenant destinatária' })
   @ApiResponse({ status: 200, description: 'Evento processado ou enfileirado com sucesso.' })
   async handleWebhook(
     @Param('tenantId') tenantId: string,
+    @CurrentTenant() currentTenantId: string,
     @Body() payload: any,
   ) {
+    if (tenantId !== currentTenantId) {
+      throw new ForbiddenException('Não é permitido despachar webhooks para outro tenant.');
+    }
     // Normaliza payload recebido (ex: formato Evolution API v2 messages.upsert)
     const remoteJid = payload.data?.key?.remoteJid || payload.remoteJid || payload.from || '5511999999999';
     const contactPhone = remoteJid.replace(/@s\.whatsapp\.net|@g\.us/, '');
