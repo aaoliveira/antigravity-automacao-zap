@@ -60,6 +60,76 @@ export class WorkflowEngineService {
       // 3. Identifica ou provisiona o Contato no banco
       const contact = await this.ensureContact(tenantId, contactPhone, event.contactName);
 
+      // 3.1 Verificação de Opt-out / Descadastramento (Conformidade Meta WhatsApp)
+      const rawText = String(event.interaction?.value || '').trim();
+      const isOptOut = /^(sair|stop|cancelar|parar|descadastrar)$/i.test(rawText);
+      if (isOptOut) {
+        const currentCustomFields = (contact.customFields as Record<string, any>) || {};
+        const currentTags = contact.tags || [];
+        await this.prisma.contact.update({
+          where: { id: contact.id },
+          data: {
+            tags: currentTags.includes('OPT_OUT') ? currentTags : [...currentTags, 'OPT_OUT'],
+            customFields: {
+              ...currentCustomFields,
+              optOut: true,
+              optOutAt: new Date().toISOString(),
+            },
+          },
+        });
+
+        // Cancela qualquer execução ativa
+        const active = await this.findActiveExecution(tenantId, contactPhone);
+        if (active) {
+          await this.prisma.flowExecution.update({
+            where: { id: active.id },
+            data: { status: ExecutionStatus.CANCELLED, completedAt: new Date() },
+          });
+        }
+
+        await this.outboxService.recordOutgoingMessage(
+          tenantId,
+          active?.id || null,
+          event.instanceName || 'whatsapp-default',
+          contactPhone,
+          'text',
+          { text: 'Você foi descadastrado com sucesso das comunicações automatizadas. Para reativar, envie QUERO VOLTAR.' },
+        );
+
+        return { processed: true, reason: 'opt_out_completed' };
+      }
+
+      // 3.2 Verificação de Opt-in / Reativação de Consentimento
+      const isOptIn = /^(quero voltar|reativar|opt-in)$/i.test(rawText);
+      const customFields = (contact.customFields as Record<string, any>) || {};
+      if (customFields.optOut) {
+        if (isOptIn) {
+          await this.prisma.contact.update({
+            where: { id: contact.id },
+            data: {
+              tags: contact.tags.filter((t) => t !== 'OPT_OUT'),
+              customFields: {
+                ...customFields,
+                optOut: false,
+                consentGivenAt: new Date().toISOString(),
+              },
+            },
+          });
+          await this.outboxService.recordOutgoingMessage(
+            tenantId,
+            null,
+            event.instanceName || 'whatsapp-default',
+            contactPhone,
+            'text',
+            { text: 'Seu consentimento foi reativado com sucesso! Como podemos te ajudar hoje?' },
+          );
+          return { processed: true, reason: 'opt_in_completed' };
+        } else {
+          this.logger.log(`Mensagem ignorada para contato com opt-out ativo: ${contactPhone}`);
+          return { processed: false, reason: 'contact_opted_out' };
+        }
+      }
+
       // 4. Verifica se existe uma sessão ativa em andamento para este contato
       const activeExecution = await this.findActiveExecution(tenantId, contactPhone);
 
@@ -326,6 +396,24 @@ export class WorkflowEngineService {
         },
       });
 
+      // Sincroniza dados do contato caso tenham sido alterados (ex: tags, customFields)
+      if (variableContext.contact?.phone) {
+        await this.prisma.contact.updateMany({
+          where: {
+            tenantId: variableContext.company.id,
+            phone: variableContext.contact.phone,
+          },
+          data: {
+            name: variableContext.contact.name,
+            tags: variableContext.contact.tags,
+            customFields: variableContext.contact.customFields,
+            lastInteractionAt: new Date(),
+          },
+        }).catch((err) => {
+          this.logger.warn(`Falha ao sincronizar dados do contato ${variableContext.contact.phone}: ${err.message}`);
+        });
+      }
+
       // 4. Verifica se o nó é bloqueante ou finalizador
       if (result.waitingForInput) {
         await this.pauseExecution(executionId, ExecutionStatus.WAITING_FOR_INPUT, currentNode.id, variableContext);
@@ -355,11 +443,10 @@ export class WorkflowEngineService {
         const edgeWithHandle = edges.find((e) => e.sourceHandle === result.nextHandle);
         if (edgeWithHandle) {
           targetNodeId = edgeWithHandle.target;
+        } else if (result.nextHandle === 'default' && edges.length > 0) {
+          targetNodeId = edges[0].target;
         }
-      }
-
-      // Se não encontrou por handle específico, tenta aresta padrão
-      if (!targetNodeId && edges.length > 0) {
+      } else if (edges.length > 0) {
         targetNodeId = edges[0].target;
       }
 
@@ -511,13 +598,21 @@ export class WorkflowEngineService {
 
       switch (trigger.type) {
         case 'KEYWORD_EXACT': {
-          const keywords = Array.isArray(cfg.keywords) ? cfg.keywords : [];
+          const keywords = Array.isArray(cfg.keywords)
+            ? cfg.keywords
+            : cfg.keyword
+            ? [cfg.keyword]
+            : [];
           matched = keywords.some((k: string) => k.toLowerCase().trim() === rawText);
           break;
         }
 
         case 'KEYWORD_CONTAINS': {
-          const keywords = Array.isArray(cfg.keywords) ? cfg.keywords : [];
+          const keywords = Array.isArray(cfg.keywords)
+            ? cfg.keywords
+            : cfg.keyword
+            ? [cfg.keyword]
+            : [];
           matched = keywords.some((k: string) => rawText.includes(k.toLowerCase().trim()));
           break;
         }

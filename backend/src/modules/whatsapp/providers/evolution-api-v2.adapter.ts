@@ -359,6 +359,7 @@ export class EvolutionApiV2Adapter implements WhatsAppProvider {
   async sendPresence(params: SendPresenceParams): Promise<void> {
     const endpoint = `/chat/sendPresence/${params.instanceName}`;
     const payload = {
+      number: this.cleanPhone(params.recipient),
       presence: params.presence,
       delay: params.delay || 1200,
     };

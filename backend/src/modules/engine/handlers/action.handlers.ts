@@ -96,7 +96,10 @@ export class ActionHumanHandoffHandler implements WorkflowNodeHandler {
 
   async execute(context: NodeExecutionContext): Promise<NodeResult> {
     const department = context.node.config?.department || 'Geral';
-    const rawClosing = context.node.config?.closingMessage;
+    const rawClosing =
+      context.node.config?.closingMessage ||
+      context.node.config?.message ||
+      'Transferindo seu atendimento para nossa equipe...';
 
     if (rawClosing && context.outboxMessage) {
       const closingMessage = this.variableResolver.interpolate(rawClosing, context.variables);

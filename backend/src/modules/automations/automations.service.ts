@@ -457,16 +457,35 @@ export class AutomationsService {
   ): Promise<void> {
     try {
       // 1. Sincroniza Gatilhos
-      const triggerNodes = (definition.nodes || []).filter((n) => n.type === 'trigger');
+      const triggerNodes = (definition.nodes || []).filter(
+        (n) =>
+          n.type === 'trigger' ||
+          (n.type as string).startsWith('trigger.') ||
+          (n.type as string).startsWith('trigger_'),
+      );
       await this.prisma.automationTrigger.deleteMany({ where: { automationId } });
 
       for (const node of triggerNodes) {
         const cfg = node.config || {};
         let tType: TriggerType = TriggerType.KEYWORD_EXACT;
-        if (cfg.triggerType === 'contains_keyword') tType = TriggerType.KEYWORD_CONTAINS;
+        if (
+          cfg.triggerType === 'contains_keyword' ||
+          cfg.matchType === 'CONTAINS' ||
+          (node.type as string) === 'trigger.keyword'
+        ) {
+          tType = TriggerType.KEYWORD_CONTAINS;
+        }
+        if (cfg.triggerType === 'exact' || cfg.matchType === 'EXACT') {
+          tType = TriggerType.KEYWORD_EXACT;
+        }
         if (cfg.triggerType === 'regex') tType = TriggerType.REGEX;
         if (cfg.triggerType === 'first_interaction') tType = TriggerType.FIRST_INTERACTION;
-        if (cfg.triggerType === 'any_message') tType = TriggerType.ANY_MESSAGE;
+        if (
+          cfg.triggerType === 'any_message' ||
+          (node.type as string) === 'trigger.message_received'
+        ) {
+          tType = TriggerType.ANY_MESSAGE;
+        }
 
         await this.prisma.automationTrigger.create({
           data: {

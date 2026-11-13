@@ -37,8 +37,14 @@ export class VariableResolverService {
     const scope = parts[0];
 
     switch (scope) {
-      case 'contact':
-        return this.getNested(context.contact, parts.slice(1));
+      case 'contact': {
+        const direct = this.getNested(context.contact, parts.slice(1));
+        if (direct !== undefined) return direct;
+        if (context.contact?.customFields) {
+          return this.getNested(context.contact.customFields, parts.slice(1));
+        }
+        return undefined;
+      }
 
       case 'conversation':
         return this.getNested(context.conversation, parts.slice(1));

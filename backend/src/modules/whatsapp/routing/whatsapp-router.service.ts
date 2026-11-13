@@ -59,6 +59,22 @@ export class WhatsAppRouterService {
       rawPayload.messageId ||
       `evt_${Date.now()}`;
 
+    // 1.1 Verificação de Idempotência e Deduplicação de Webhook
+    if (externalMessageId && !externalMessageId.startsWith('evt_')) {
+      const existingProcessed = await this.prisma.webhookEvent.findFirst({
+        where: {
+          tenantId,
+          externalId: externalMessageId,
+          status: WebhookEventStatus.PROCESSED,
+        },
+      });
+
+      if (existingProcessed) {
+        this.logger.warn(`Webhook duplicado recebido e ignorado [ID Externo: ${externalMessageId}]`);
+        return { success: true, eventId: existingProcessed.id, reason: 'duplicate_ignored' };
+      }
+    }
+
     // 2. Persiste o evento bruto no banco para auditoria antes do processamento assíncrono
     const webhookEvent = await this.prisma.webhookEvent.create({
       data: {

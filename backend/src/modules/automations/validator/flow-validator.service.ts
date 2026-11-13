@@ -458,7 +458,15 @@ export class FlowValidatorService {
     switch (normType) {
       case 'trigger': {
         const c = cfg as TriggerNodeConfig;
-        if (!c.triggerType) {
+        const triggerType =
+          c.triggerType ||
+          ((node.type as string) === 'trigger.keyword'
+            ? 'contains_keyword'
+            : (node.type as string) === 'trigger.message_received'
+            ? 'any_message'
+            : undefined);
+
+        if (!triggerType) {
           errors.push({
             nodeId: node.id,
             field: 'config.triggerType',
@@ -466,8 +474,9 @@ export class FlowValidatorService {
             code: ValidationCodes.INVALID_NODE_CONFIG,
           });
         } else if (
-          (c.triggerType === 'exact_keyword' || c.triggerType === 'contains_keyword') &&
-          (!Array.isArray(c.keywords) || c.keywords.length === 0)
+          (triggerType === 'exact_keyword' || triggerType === 'contains_keyword') &&
+          (!Array.isArray(c.keywords) || c.keywords.length === 0) &&
+          !(c as any).keyword
         ) {
           errors.push({
             nodeId: node.id,
@@ -475,7 +484,7 @@ export class FlowValidatorService {
             message: `O nó de gatilho por palavra-chave "${node.id}" precisa conter pelo menos uma palavra-chave.`,
             code: ValidationCodes.INVALID_NODE_CONFIG,
           });
-        } else if (c.triggerType === 'regex' && (!c.regexPattern || c.regexPattern.trim() === '')) {
+        } else if (triggerType === 'regex' && (!c.regexPattern || c.regexPattern.trim() === '')) {
           errors.push({
             nodeId: node.id,
             field: 'config.regexPattern',
@@ -522,7 +531,8 @@ export class FlowValidatorService {
 
       case 'buttons': {
         const c = cfg as ButtonsNodeConfig;
-        if (!c.body || typeof c.body !== 'string' || c.body.trim() === '') {
+        const bodyText = c.body || (c as any).text;
+        if (!bodyText || typeof bodyText !== 'string' || bodyText.trim() === '') {
           errors.push({
             nodeId: node.id,
             field: 'config.body',
@@ -637,7 +647,11 @@ export class FlowValidatorService {
 
       case 'question_input': {
         const c = cfg as QuestionInputNodeConfig;
-        if (!c.questionText || typeof c.questionText !== 'string' || c.questionText.trim() === '') {
+        const qText = c.questionText || (c as any).question || (c as any).text;
+        const targetVar = c.targetVariable || (c as any).variable || (c as any).saveVariable;
+        const expType = c.expectedType || 'text';
+
+        if (!qText || typeof qText !== 'string' || qText.trim() === '') {
           errors.push({
             nodeId: node.id,
             field: 'config.questionText',
@@ -645,7 +659,7 @@ export class FlowValidatorService {
             code: ValidationCodes.INVALID_NODE_CONFIG,
           });
         }
-        if (!c.targetVariable || typeof c.targetVariable !== 'string' || c.targetVariable.trim() === '') {
+        if (!targetVar || typeof targetVar !== 'string' || targetVar.trim() === '') {
           errors.push({
             nodeId: node.id,
             field: 'config.targetVariable',
@@ -653,7 +667,7 @@ export class FlowValidatorService {
             code: ValidationCodes.INVALID_NODE_CONFIG,
           });
         }
-        if (!['text', 'number', 'email', 'phone', 'regex'].includes(c.expectedType)) {
+        if (!['text', 'number', 'email', 'phone', 'regex'].includes(expType)) {
           errors.push({
             nodeId: node.id,
             field: 'config.expectedType',
@@ -828,6 +842,19 @@ export class FlowValidatorService {
         break;
       }
 
+      case 'interaction.capture': {
+        const targetVar = cfg.targetVariable || cfg.variable || cfg.variableName;
+        if (!targetVar || typeof targetVar !== 'string' || targetVar.trim() === '') {
+          errors.push({
+            nodeId: node.id,
+            field: 'config.targetVariable',
+            message: `O nó de captura "${node.id}" deve especificar a variável de destino (targetVariable).`,
+            code: ValidationCodes.INVALID_NODE_CONFIG,
+          });
+        }
+        break;
+      }
+
       default:
         break;
     }
@@ -933,7 +960,8 @@ export class FlowValidatorService {
     }
     if (t === 'message.buttons') return 'buttons';
     if (t === 'message.list') return 'list_interactive';
-    if (t === 'interaction.question' || t === 'interaction.capture') return 'question_input';
+    if (t === 'interaction.question') return 'question_input';
+    if (t === 'interaction.capture') return 'interaction.capture';
     if (t === 'interaction.choice') return 'buttons';
     if (t === 'logic.condition') return 'condition';
     if (t === 'logic.switch') return 'switch';

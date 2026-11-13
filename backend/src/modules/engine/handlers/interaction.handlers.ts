@@ -37,14 +37,29 @@ export class InteractionQuestionHandler implements WorkflowNodeHandler {
       }
 
       // Validação passou com sucesso!
+      const cleanTarget = targetVariable.replace(/^\{\{|\}\}$/g, '').trim();
+      const updates: Record<string, any> = {
+        [cleanTarget]: rawInput,
+        last_input: rawInput,
+        last_response: rawInput,
+      };
+
+      if (cleanTarget.startsWith('contact.')) {
+        const field = cleanTarget.replace(/^contact\.(customFields\.)?/, '');
+        if (field === 'name') {
+          context.variables.contact.name = rawInput;
+        } else {
+          context.variables.contact.customFields = context.variables.contact.customFields || {};
+          context.variables.contact.customFields[field] = rawInput;
+        }
+      }
+
       return {
         success: true,
         nextHandle: 'default',
-        variableUpdates: {
-          [targetVariable]: rawInput,
-        },
+        variableUpdates: updates,
         outputPayload: {
-          capturedVariable: targetVariable,
+          capturedVariable: cleanTarget,
           capturedValue: rawInput,
         },
       };
@@ -118,15 +133,38 @@ export class InteractionCaptureHandler implements WorkflowNodeHandler {
   readonly type = ['interaction.capture'];
 
   async execute(context: NodeExecutionContext): Promise<NodeResult> {
-    const targetVariable = context.node.config?.targetVariable || 'captured_value';
-    const value = context.incomingInteraction?.value || '';
+    const rawTarget =
+      context.node.config?.targetVariable ||
+      context.node.config?.variable ||
+      context.node.config?.variableName ||
+      'captured_value';
+    const targetVariable = rawTarget.replace(/^\{\{|\}\}$/g, '').trim();
+
+    const value =
+      context.incomingInteraction?.value ??
+      context.variables?.execution?.variables?.last_input ??
+      context.variables?.execution?.variables?.last_response ??
+      (context.variables as any)?.last_input ??
+      '';
+
+    const updates: Record<string, any> = {
+      [targetVariable]: value,
+    };
+
+    if (targetVariable.startsWith('contact.')) {
+      const field = targetVariable.replace(/^contact\.(customFields\.)?/, '');
+      if (field === 'name') {
+        context.variables.contact.name = String(value);
+      } else {
+        context.variables.contact.customFields = context.variables.contact.customFields || {};
+        context.variables.contact.customFields[field] = value;
+      }
+    }
 
     return {
       success: true,
       nextHandle: 'default',
-      variableUpdates: {
-        [targetVariable]: value,
-      },
+      variableUpdates: updates,
       outputPayload: {
         targetVariable,
         value,

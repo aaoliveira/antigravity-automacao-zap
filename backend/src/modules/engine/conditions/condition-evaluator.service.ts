@@ -60,7 +60,8 @@ export class ConditionEvaluatorService {
    * Avalia uma única regra relacional de forma segura (sem eval)
    */
   private evaluateSingleRule(rule: EvaluationRule, context: VariableContext): boolean {
-    const rawActual = this.variableResolver.resolvePath(rule.variable, context);
+    const varName = rule.variable || (rule as any).field || '';
+    const rawActual = this.variableResolver.resolvePath(varName, context);
     const op = String(rule.operator || '').toUpperCase().trim();
     const expected = rule.value;
 
