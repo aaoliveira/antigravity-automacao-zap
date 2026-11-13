@@ -16,7 +16,7 @@ if [ -n "$DATABASE_URL" ]; then
   }
 
   echo "==> Verificando dados iniciais e seed demonstrativo..."
-  npx prisma db seed || true
+  node prisma/seed.js || npx prisma db seed || true
 fi
 
 echo "==> Iniciando processo NestJS: $@"

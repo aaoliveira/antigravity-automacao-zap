@@ -14,7 +14,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:status": "prisma migrate status",
-    "prisma:seed": "ts-node prisma/seed.ts",
+    "prisma:seed": "node prisma/seed.js",
     "test": "jest --runInBand --forceExit",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
@@ -79,6 +79,6 @@
     "testEnvironment": "node"
   },
   "prisma": {
-    "seed": "ts-node prisma/seed.ts"
+    "seed": "node prisma/seed.js"
   }
 }

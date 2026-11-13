@@ -1,4 +1,4 @@
-import { PrismaClient, AutomationStatus } from '@prisma/client';
+const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
 
@@ -110,15 +110,15 @@ async function main() {
   const autoCommercial = await prisma.automation.upsert({
     where: { id: '00000000-0000-4000-b000-000000000001' },
     update: {
-      currentDraft: commercialDraft as any,
+      currentDraft: commercialDraft,
     },
     create: {
       id: '00000000-0000-4000-b000-000000000001',
       tenantId,
       name: 'Atendimento Comercial e Vendas',
       description: 'Fluxo comercial com opções interativas, captura de dados e transição de atendimento.',
-      status: AutomationStatus.DRAFT,
-      currentDraft: commercialDraft as any,
+      status: 'DRAFT',
+      currentDraft: commercialDraft,
     },
   });
   console.log(`✓ Automação 1 configurada: ${autoCommercial.name} (${autoCommercial.id})`);
@@ -168,15 +168,15 @@ async function main() {
   const autoBlank = await prisma.automation.upsert({
     where: { id: '00000000-0000-4000-b000-000000000002' },
     update: {
-      currentDraft: blankDraft as any,
+      currentDraft: blankDraft,
     },
     create: {
       id: '00000000-0000-4000-b000-000000000002',
       tenantId,
       name: 'Novo Fluxo em Branco',
       description: 'Ponto de partida para novos fluxos com nó inicial já configurado.',
-      status: AutomationStatus.DRAFT,
-      currentDraft: blankDraft as any,
+      status: 'DRAFT',
+      currentDraft: blankDraft,
     },
   });
   console.log(`✓ Automação 2 configurada: ${autoBlank.name} (${autoBlank.id})`);
