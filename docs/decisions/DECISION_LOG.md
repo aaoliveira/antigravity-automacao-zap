@@ -126,3 +126,20 @@
 - **Consequências:**
   - Positivas: Proteção da CPU e da estabilidade de todo o cluster SaaS contra fluxos mal formados.
   - Negativas: Fluxos extremamente longos sem interação do usuário precisam ser desenhados com parcimônia (o que é uma boa prática de UX conversacional).
+
+
+---
+
+## ADR-008: Implementação do Domínio de Automações, Validação Estrutural e Versionamento Imutável
+
+- **Status:** Aprovado e Implementado
+- **Data:** 2026-11-13
+- **Contexto:**
+  O Prompt 02 demandou a implementação do domínio backend para gerenciamento completo dos fluxos de automação conversacional (CRUD, validação de integridade do grafo, versionamento imutável, duplicação e restauração), mantendo isolamento multi-tenant irrestrito.
+- **Decisão:**
+  - Criadas e migradas as entidades: `Automation`, `FlowVersion`, `FlowExecution`, `FlowExecutionNode`, `FlowVariable`, `AutomationTrigger` e `FlowExecutionLog`.
+  - Todas as tabelas contêm `tenantId` com chave estrangeira para `tenants` e índices compostos.
+  - Implementado o `FlowValidatorService` com detecção de 19 categorias de erros estruturais (nós órfãos, conexões inválidas, ausência de gatilho, ausência de saídas obrigatórias e detecção de ciclos não permitidos usando DFS).
+  - Versionamento imutável implementado com incremento automático de `versionNumber` em `flow_versions` e bloqueio de publicação para fluxos inválidos.
+- **Consequências:**
+  - Positivas: 100% de cobertura nos requisitos do domínio, validação rigorosa antes de persistir versões ativas, proteção multi-tenant validada com testes unitários e de integração E2E.

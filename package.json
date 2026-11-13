@@ -1,0 +1,29 @@
+{
+  "name": "antigravity-automacao-zap",
+  "version": "1.0.0",
+  "description": "SaaS Multi-tenant de Automação Conversacional WhatsApp com Visual Flow Builder",
+  "private": true,
+  "workspaces": [
+    "backend"
+  ],
+  "scripts": {
+    "dev:backend": "npm run start:dev --workspace=backend",
+    "build:backend": "npm run build --workspace=backend",
+    "test": "npm run test --workspace=backend",
+    "test:e2e": "npm run test:e2e --workspace=backend",
+    "db:migrate": "npm run prisma:migrate --workspace=backend",
+    "db:generate": "npm run prisma:generate --workspace=backend"
+  },
+  "keywords": [
+    "whatsapp",
+    "automation",
+    "flow-builder",
+    "evolution-api",
+    "typebot",
+    "n8n",
+    "saas",
+    "nestjs"
+  ],
+  "author": "Antigravity Engineering Team",
+  "license": "UNLICENSED"
+}

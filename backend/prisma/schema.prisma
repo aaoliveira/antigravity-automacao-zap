@@ -1,0 +1,266 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ==========================================
+// ENUMS DE DOMÍNIO
+// ==========================================
+
+enum UserRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum AutomationStatus {
+  DRAFT
+  PUBLISHED
+  PAUSED
+  ARCHIVED
+}
+
+enum TriggerType {
+  KEYWORD_EXACT
+  KEYWORD_CONTAINS
+  REGEX
+  FIRST_INTERACTION
+  ANY_MESSAGE
+  WEBHOOK
+}
+
+enum VariableType {
+  STRING
+  NUMBER
+  BOOLEAN
+  JSON
+}
+
+enum ExecutionStatus {
+  RUNNING
+  WAITING_INPUT
+  WAITING_DELAY
+  COMPLETED
+  FAILED
+  HANDOVER_HUMAN
+  PAUSED
+}
+
+enum ExecutionNodeStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
+enum LogLevel {
+  INFO
+  WARN
+  ERROR
+}
+
+// ==========================================
+// 1. TENANT E USUÁRIOS (MULTI-TENANCY)
+// ==========================================
+
+model Tenant {
+  id               String   @id @default(uuid()) @db.Uuid
+  name             String   @db.VarChar(255)
+  slug             String   @unique @db.VarChar(100)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now()) @db.Timestamptz
+  updatedAt        DateTime @updatedAt @db.Timestamptz
+
+  users            User[]
+  automations      Automation[]
+  flowVersions     FlowVersion[]
+  triggers         AutomationTrigger[]
+  variables        FlowVariable[]
+  executions       FlowExecution[]
+  executionNodes   FlowExecutionNode[]
+  executionLogs    FlowExecutionLog[]
+
+  @@map("tenants")
+}
+
+model User {
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @db.Uuid
+  name           String    @db.VarChar(255)
+  email          String    @unique @db.VarChar(255)
+  passwordHash   String    @db.VarChar(255)
+  role           UserRole  @default(MEMBER)
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now()) @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @db.Timestamptz
+
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("users")
+}
+
+// ==========================================
+// 2. AUTOMAÇÃO E VERSIONAMENTO DE FLUXO
+// ==========================================
+
+model Automation {
+  id               String           @id @default(uuid()) @db.Uuid
+  tenantId         String           @db.Uuid
+  name             String           @db.VarChar(255)
+  description      String?          @db.Text
+  status           AutomationStatus @default(DRAFT)
+  activeVersionId  String?          @db.Uuid
+  currentDraft     Json?            // Armazena definição do rascunho: { nodes, edges, viewport, variables }
+  createdAt        DateTime         @default(now()) @db.Timestamptz
+  updatedAt        DateTime         @updatedAt @db.Timestamptz
+
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  versions         FlowVersion[]
+  triggers         AutomationTrigger[]
+  variables        FlowVariable[]
+  executions       FlowExecution[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@map("automations")
+}
+
+model FlowVersion {
+  id               String       @id @default(uuid()) @db.Uuid
+  automationId     String       @db.Uuid
+  tenantId         String       @db.Uuid
+  versionNumber    Int
+  schemaVersion    String       @default("1.0.0") @db.VarChar(20)
+  name             String       @db.VarChar(255)
+  description      String?      @db.Text
+  definition       Json         // Estrutura imutável: { schemaVersion, viewport, nodes, edges, variables }
+  isPublished      Boolean      @default(false)
+  publishedBy      String?      @db.Uuid
+  publishedAt      DateTime?    @db.Timestamptz
+  createdAt        DateTime     @default(now()) @db.Timestamptz
+
+  automation       Automation   @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  tenant           Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  executions       FlowExecution[]
+
+  @@unique([automationId, versionNumber])
+  @@index([tenantId])
+  @@index([automationId])
+  @@map("flow_versions")
+}
+
+// ==========================================
+// 3. GATILHOS E VARIÁVEIS
+// ==========================================
+
+model AutomationTrigger {
+  id               String       @id @default(uuid()) @db.Uuid
+  automationId     String       @db.Uuid
+  tenantId         String       @db.Uuid
+  type             TriggerType  @default(KEYWORD_EXACT)
+  config           Json         // { keywords: string[], caseSensitive?: boolean, regexPattern?: string }
+  isActive         Boolean      @default(true)
+  createdAt        DateTime     @default(now()) @db.Timestamptz
+  updatedAt        DateTime     @updatedAt @db.Timestamptz
+
+  automation       Automation   @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  tenant           Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([automationId])
+  @@map("automation_triggers")
+}
+
+model FlowVariable {
+  id               String       @id @default(uuid()) @db.Uuid
+  automationId     String       @db.Uuid
+  tenantId         String       @db.Uuid
+  name             String       @db.VarChar(100)
+  type             VariableType @default(STRING)
+  defaultValue     String?      @db.Text
+  description      String?      @db.Text
+  isGlobal         Boolean      @default(false)
+  createdAt        DateTime     @default(now()) @db.Timestamptz
+  updatedAt        DateTime     @updatedAt @db.Timestamptz
+
+  automation       Automation   @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  tenant           Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([automationId, name])
+  @@index([tenantId])
+  @@map("flow_variables")
+}
+
+// ==========================================
+// 4. EXECUÇÃO, PASSOS E LOGS
+// ==========================================
+
+model FlowExecution {
+  id                String          @id @default(uuid()) @db.Uuid
+  tenantId          String          @db.Uuid
+  automationId      String          @db.Uuid
+  flowVersionId     String          @db.Uuid
+  contactPhone      String          @db.VarChar(50)
+  contactName       String?         @db.VarChar(255)
+  status            ExecutionStatus @default(RUNNING)
+  currentNodeId     String?         @db.VarChar(100)
+  contextData       Json?           // Snapshot das variáveis da sessão em tempo de execução
+  startedAt         DateTime        @default(now()) @db.Timestamptz
+  completedAt       DateTime?       @db.Timestamptz
+  lastInteractionAt DateTime        @default(now()) @db.Timestamptz
+
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  automation        Automation      @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  flowVersion       FlowVersion     @relation(fields: [flowVersionId], references: [id], onDelete: Restrict)
+  executionNodes    FlowExecutionNode[]
+  logs              FlowExecutionLog[]
+
+  @@index([tenantId, contactPhone])
+  @@index([automationId, status])
+  @@map("flow_executions")
+}
+
+model FlowExecutionNode {
+  id            String              @id @default(uuid()) @db.Uuid
+  tenantId      String              @db.Uuid
+  executionId   String              @db.Uuid
+  nodeId        String              @db.VarChar(100)
+  nodeType      String              @db.VarChar(50)
+  status        ExecutionNodeStatus @default(PENDING)
+  inputPayload  Json?
+  outputPayload Json?
+  error         String?             @db.Text
+  startedAt     DateTime            @default(now()) @db.Timestamptz
+  completedAt   DateTime?           @db.Timestamptz
+
+  tenant        Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  execution     FlowExecution       @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  @@index([executionId])
+  @@index([tenantId])
+  @@map("flow_execution_nodes")
+}
+
+model FlowExecutionLog {
+  id            String          @id @default(uuid()) @db.Uuid
+  tenantId      String          @db.Uuid
+  executionId   String          @db.Uuid
+  nodeId        String?         @db.VarChar(100)
+  level         LogLevel        @default(INFO)
+  message       String          @db.Text
+  details       Json?
+  createdAt     DateTime        @default(now()) @db.Timestamptz
+
+  tenant        Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  execution     FlowExecution   @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  @@index([executionId, createdAt])
+  @@index([tenantId])
+  @@map("flow_execution_logs")
+}

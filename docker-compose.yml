@@ -1,0 +1,51 @@
+services:
+  # ============================================================================
+  # BANCO DE DADOS RELACIONAL (POSTGRESQL 16)
+  # ============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: zap_builder_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-antigravity_automacao_zap}
+    ports:
+      - "${POSTGRES_PORT:-5435}:5432"
+    volumes:
+      - zap_builder_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-antigravity_automacao_zap}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - zap_builder_network
+
+  # ============================================================================
+  # FILAS E CACHE (REDIS 7)
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: zap_builder_redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6382}:6379"
+    volumes:
+      - zap_builder_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - zap_builder_network
+
+volumes:
+  zap_builder_pgdata:
+  zap_builder_redisdata:
+
+networks:
+  zap_builder_network:
+    name: zap_builder_network
+    driver: bridge
