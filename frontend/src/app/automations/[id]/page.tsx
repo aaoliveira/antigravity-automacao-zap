@@ -23,18 +23,49 @@ export default function AutomationEditorPage() {
         setAutomation(data);
         setLoading(false);
       })
-      .catch((err) => {
-        // Se a automação ainda não existir no banco (ex: ID demonstrativo), cria um estado padrão
-        console.warn(`Automação ${id} não encontrada no banco ou backend offline:`, err.message);
-        setAutomation({
-          id,
-          tenantId: '00000000-0000-4000-a000-000000000001',
-          name: 'Atendimento Comercial e Vendas',
-          status: 'DRAFT',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-        setLoading(false);
+      .catch(async (err) => {
+        // Se a automação ainda não existir no banco, auto-provisiona no backend
+        console.warn(`Automação ${id} não encontrada no banco. Provisionando rascunho inicial:`, err.message);
+        const fallbackName =
+          id === '00000000-0000-4000-b000-000000000002'
+            ? 'Novo Fluxo em Branco'
+            : 'Atendimento Comercial e Vendas';
+        const fallbackDraft: any = {
+          schemaVersion: '1.0.0',
+          flowId: id,
+          name: fallbackName,
+          nodes: [
+            {
+              id: 'node-trigger-init',
+              type: 'custom',
+              position: { x: 250, y: 150 },
+              data: {
+                nodeType: 'trigger.message_received',
+                label: 'Mensagem Recebida',
+                category: 'triggers',
+                config: { matchType: 'any' },
+              },
+            },
+          ],
+          edges: [],
+        };
+
+        try {
+          const created = await FlowApi.updateDraft(id, fallbackDraft, fallbackName);
+          setAutomation(created);
+        } catch {
+          setAutomation({
+            id,
+            tenantId: '00000000-0000-4000-a000-000000000001',
+            name: fallbackName,
+            status: 'DRAFT',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            currentDraft: fallbackDraft,
+          });
+        } finally {
+          setLoading(false);
+        }
       });
   }, [id]);
 

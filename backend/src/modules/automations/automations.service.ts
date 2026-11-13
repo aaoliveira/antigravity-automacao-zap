@@ -186,22 +186,44 @@ export class AutomationsService {
   }
 
   /**
-   * Atualiza dados cadastrais ou salva rascunho do fluxo
+   * Atualiza dados cadastrais ou salva rascunho do fluxo (com auto-provisionamento resiliente)
    */
   async update(tenantId: string, id: string, dto: UpdateAutomationDto) {
-    await this.findOne(tenantId, id);
+    await this.ensureTenant(tenantId);
+    let automation = await this.prisma.automation.findFirst({ where: { id, tenantId } });
 
-    const dataToUpdate: any = {};
-    if (dto.name !== undefined) dataToUpdate.name = dto.name;
-    if (dto.description !== undefined) dataToUpdate.description = dto.description;
-    if (dto.currentDraft !== undefined) {
-      dataToUpdate.currentDraft = dto.currentDraft as any;
+    if (!automation) {
+      // Verifica se o ID pertence a outra empresa para preservar isolamento multi-tenant
+      const belongsToOtherTenant = await this.prisma.automation.findFirst({ where: { id } });
+      if (belongsToOtherTenant) {
+        throw new NotFoundException(`Automação com ID "${id}" não encontrada.`);
+      }
+
+      // Se não existe em nenhum tenant, auto-provisiona para o tenant atual
+      const draft = dto.currentDraft || this.getDefaultDraft(dto.name || 'Nova Automação');
+      await this.prisma.automation.create({
+        data: {
+          id,
+          tenantId,
+          name: dto.name || 'Nova Automação',
+          description: dto.description || '',
+          status: AutomationStatus.DRAFT,
+          currentDraft: draft as any,
+        },
+      });
+    } else {
+      const dataToUpdate: any = {};
+      if (dto.name !== undefined) dataToUpdate.name = dto.name;
+      if (dto.description !== undefined) dataToUpdate.description = dto.description;
+      if (dto.currentDraft !== undefined) {
+        dataToUpdate.currentDraft = dto.currentDraft as any;
+      }
+
+      await this.prisma.automation.update({
+        where: { id },
+        data: dataToUpdate,
+      });
     }
-
-    const updated = await this.prisma.automation.update({
-      where: { id },
-      data: dataToUpdate,
-    });
 
     if (dto.currentDraft) {
       await this.syncTriggersAndVariables(tenantId, id, dto.currentDraft);
@@ -233,8 +255,12 @@ export class AutomationsService {
    * Valida o fluxo (seja o rascunho salvo ou um payload enviado)
    */
   async validate(tenantId: string, id: string, dto?: ValidateFlowDto) {
+    if (dto?.definition) {
+      return this.flowValidator.validate(dto.definition);
+    }
+
     const automation = await this.findOne(tenantId, id);
-    const definitionToValidate = (dto?.definition || automation.currentDraft) as WorkflowDefinition;
+    const definitionToValidate = automation.currentDraft as unknown as WorkflowDefinition;
 
     if (!definitionToValidate) {
       throw new BadRequestException('Nenhum rascunho ou definição fornecida para validação.');
@@ -247,7 +273,27 @@ export class AutomationsService {
    * Publica o fluxo gerando uma nova versão imutável
    */
   async publish(tenantId: string, id: string, userId: string, dto?: PublishFlowDto) {
-    const automation = await this.findOne(tenantId, id);
+    let automation: any;
+    try {
+      automation = await this.findOne(tenantId, id);
+    } catch (err) {
+      // Se não existe para este tenant, verifica se pertence a outro tenant
+      const belongsToOtherTenant = await this.prisma.automation.findFirst({ where: { id } });
+      if (belongsToOtherTenant) {
+        throw new NotFoundException(`Automação com ID "${id}" não encontrada.`);
+      }
+
+      if (dto?.definition) {
+        await this.update(tenantId, id, {
+          name: dto.definition.name || 'Nova Automação',
+          currentDraft: dto.definition,
+        });
+        automation = await this.findOne(tenantId, id);
+      } else {
+        throw err;
+      }
+    }
+
     const definitionToPublish = (dto?.definition || automation.currentDraft) as WorkflowDefinition;
 
     if (!definitionToPublish) {

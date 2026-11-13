@@ -21,7 +21,8 @@
     "test:e2e": "npm run test:e2e --workspace=backend",
     "test:frontend": "npm run test --workspace=frontend",
     "db:migrate": "npm run prisma:migrate --workspace=backend",
-    "db:generate": "npm run prisma:generate --workspace=backend"
+    "db:generate": "npm run prisma:generate --workspace=backend",
+    "db:seed": "npm run prisma:seed --workspace=backend"
   },
   "keywords": [
     "whatsapp",

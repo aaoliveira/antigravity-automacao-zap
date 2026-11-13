@@ -359,6 +359,33 @@ describe('Automations API (E2E Integration & Multi-tenant Tests)', () => {
       expect(res.body.status).toBe('DRAFT');
     });
 
+    it('POST /automations/:id/publish: deve auto-provisionar e publicar fluxo iniciado diretamente por ID não cadastrado quando enviada a definição', async () => {
+      const newAutoId = '00000000-0000-4000-b000-000000000099';
+      const flowDef = JSON.parse(JSON.stringify(validFlow));
+      flowDef.flowId = newAutoId;
+
+      const res = await request(app.getHttpServer())
+        .post(`/automations/${newAutoId}/publish`)
+        .set('x-tenant-id', tenantA)
+        .send({
+          releaseNotes: 'Publicação direta de novo fluxo demonstrativo',
+          definition: flowDef,
+        })
+        .expect(201);
+
+      expect(res.body.success).toBe(true);
+      expect(res.body.version.versionNumber).toBe(1);
+
+      // Confirma que a automação agora existe no banco
+      const getRes = await request(app.getHttpServer())
+        .get(`/automations/${newAutoId}`)
+        .set('x-tenant-id', tenantA)
+        .expect(200);
+
+      expect(getRes.body.id).toBe(newAutoId);
+      expect(getRes.body.status).toBe('PUBLISHED');
+    });
+
     it('DELETE /automations/:id: deve excluir a automação', async () => {
       const res = await request(app.getHttpServer())
         .delete(`/automations/${automationId}`)

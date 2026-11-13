@@ -441,15 +441,19 @@ export function FlowBuilderInner({
 
   // Publicação de Versão
   const handlePublish = async () => {
-    await executeSave();
+    setSaveStatus('saving');
+    const definition: WorkflowDefinition = {
+      schemaVersion: '1.0.0',
+      flowId: automationId,
+      name: flowName,
+      nodes,
+      edges,
+    };
+
     try {
-      const definition: WorkflowDefinition = {
-        schemaVersion: '1.0.0',
-        flowId: automationId,
-        name: flowName,
-        nodes,
-        edges,
-      };
+      // Garante persistência prévia do rascunho no banco antes da publicação
+      await FlowApi.updateDraft(automationId, definition, flowName);
+      setSaveStatus('saved');
 
       const res = await FlowApi.publishFlow(
         automationId,
@@ -459,6 +463,7 @@ export function FlowBuilderInner({
 
       alert(`🎉 Versão publicada com sucesso!\nVersão: ${res.version?.versionNumber || 1}`);
     } catch (err: any) {
+      setSaveStatus('unsaved');
       const apiErrors = err.response?.data?.errors;
       if (apiErrors && apiErrors.length > 0) {
         setValidationErrors(apiErrors);

@@ -14,6 +14,9 @@ if [ -n "$DATABASE_URL" ]; then
     sleep 3
     npx prisma migrate deploy
   }
+
+  echo "==> Verificando dados iniciais e seed demonstrativo..."
+  npx prisma db seed || true
 fi
 
 echo "==> Iniciando processo NestJS: $@"
