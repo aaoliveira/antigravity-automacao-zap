@@ -4,13 +4,18 @@
   "description": "SaaS Multi-tenant de Automação Conversacional WhatsApp com Visual Flow Builder",
   "private": true,
   "workspaces": [
-    "backend"
+    "backend",
+    "frontend"
   ],
   "scripts": {
     "dev:backend": "npm run start:dev --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend",
     "build:backend": "npm run build --workspace=backend",
+    "build:frontend": "npm run build --workspace=frontend",
+    "build": "npm run build:backend && npm run build:frontend",
     "test": "npm run test --workspace=backend",
     "test:e2e": "npm run test:e2e --workspace=backend",
+    "test:frontend": "npm run test --workspace=frontend",
     "db:migrate": "npm run prisma:migrate --workspace=backend",
     "db:generate": "npm run prisma:generate --workspace=backend"
   },

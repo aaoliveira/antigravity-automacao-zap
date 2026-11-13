@@ -186,3 +186,23 @@
 - **Consequências:**
   - Positivas: Conexão real e resiliente com o WhatsApp, suporte completo a fluxos conversacionais bidirecionais ponta a ponta, total conformidade com a Evolution API v2 e validação integral com 96 testes automatizados verdes (61 unitários + 35 E2E).
 
+---
+
+## ADR-011: Implementação do Construtor Visual no Frontend com React Flow, Drawer de Configurações e Simulador WhatsApp Web
+
+- **Status:** Aprovado e Implementado
+- **Data:** 2026-11-13
+- **Contexto:**
+  O Prompt 05 exigiu a implementação do construtor visual de automações no frontend da plataforma SaaS (Next.js 15, React 19, TypeScript, Tailwind CSS, `@xyflow/react`), proporcionando uma experiência de edição fluida, moderna e semelhante ao Typebot e n8n. Era necessário contemplar layout de 4 quadrantes (barra superior com ações e status, catálogo lateral com drag-and-drop, canvas infinito com controles e drawer de configurações), catálogo completo de 26 tipos de blocos, saídas dinâmicas nomeadas (para botões, listas, condições e switches), salvamento automático debounced, validação visual com destaque de erros e um simulador interativo em tempo real reproduzindo a interface do WhatsApp Web.
+- **Decisão:**
+  - **Canvas Infinito com React Flow (`@xyflow/react` v12):** Componente central [FlowBuilder.tsx](file:///home/alexandre/Projetos/antigravity-automacao-zap/frontend/src/components/flow/FlowBuilder.tsx) com suporte a Zoom, Pan, MiniMap, Controls, Background dot grid, seleção múltipla, atalhos de teclado (Ctrl+Z, Ctrl+Y, Ctrl+S, Del, etc.) e histórico de desfazer/refazer (Undo/Redo).
+  - **Nós Visuais Customizados (`CustomFlowNode.tsx`):** Componentes independentes renderizando ícones coloridos por categoria, indicador de configuração, badge de erros pulsante, prévia resumida do conteúdo (balão de texto, botões, tags) e handles especializados (saídas dinâmicas por botão, por seção/opção de lista, handles `true`/`false` para condições e handles de casos para switches).
+  - **Catálogo Lateral com Drag & Drop (`BlockCatalogSidebar.tsx`):** Painel retrátil categorizado (Gatilhos, Mensagens, Interações, Lógica, Ações) com busca instantânea e drag-and-drop com posicionamento calculado via `screenToFlowPosition`.
+  - **Barra Superior com Ações de Domínio (`FlowHeader.tsx`):** Edição inline do título, indicador de salvamento automático (Salvo / Salvando... / Alterações pendentes), seletor de conexão WhatsApp, botões de ação (Salvar Rascunho, Validar, Testar no Simulador e Publicar Versão Imutável).
+  - **Drawer de Configurações Contextual (`NodeConfigDrawer.tsx`):** Formulários específicos com barra de formatação estilo WhatsApp (`*negrito*`, `_itálico_`, `~tachado~`, `monoespaçado`), inserção rápida de variáveis (`{{contact.name}}`, etc.), upload/URL de mídia com pré-visualização, construtor de botões de resposta e regras relacionais de condição.
+  - **Simulador Interativo WhatsApp Web (`WhatsAppSimulatorModal.tsx`):** Emulador completo da interface do WhatsApp Web em modo de teste seguro, com balões verdes e cinzas, digitação simulada ("digitando..."), botões interativos clicáveis diretamente na conversa, captura de respostas em variáveis e visualização em tempo real das variáveis da sessão e nós percorridos.
+  - **Validação Integrada:** Erros estruturais retornados pelo backend acionam o [ValidationErrorsModal.tsx](file:///home/alexandre/Projetos/antigravity-automacao-zap/frontend/src/components/flow/validation/ValidationErrorsModal.tsx) e apontam diretamente para o nó problemático com um clique.
+- **Consequências:**
+  - Positivas: Construtor visual de qualidade comercial SaaS plenamente funcional, desacoplado da execução backend, com validação de build estático Next.js e 12 testes automatizados no frontend cobrindo renderização, catálogo, formulários, simulador e cliente de API (totalizando 108 testes verdes no monorepo).
+
+
