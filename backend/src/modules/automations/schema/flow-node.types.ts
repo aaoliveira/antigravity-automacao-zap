@@ -3,6 +3,7 @@
 // ============================================================================
 
 export type FlowNodeType =
+  // Formato com underscore (Prompt 01 / Typebot / n8n)
   | 'trigger'
   | 'message_text'
   | 'message_media'
@@ -15,7 +16,34 @@ export type FlowNodeType =
   | 'wait_reply'
   | 'set_variable'
   | 'human_transfer'
-  | 'end_flow';
+  | 'end_flow'
+  // Formato pontilhado (Prompt 03 - Domínio e Catálogo de Execução)
+  | 'trigger.message_received'
+  | 'trigger.keyword'
+  | 'message.text'
+  | 'message.image'
+  | 'message.video'
+  | 'message.audio'
+  | 'message.document'
+  | 'message.sticker'
+  | 'message.location'
+  | 'message.contact'
+  | 'message.buttons'
+  | 'message.list'
+  | 'message.template'
+  | 'interaction.question'
+  | 'interaction.capture'
+  | 'interaction.choice'
+  | 'logic.condition'
+  | 'logic.switch'
+  | 'logic.delay'
+  | 'logic.wait_for_input'
+  | 'action.add_tag'
+  | 'action.remove_tag'
+  | 'action.update_contact'
+  | 'action.start_flow'
+  | 'action.human_handoff'
+  | 'action.end';
 
 // ----------------------------------------------------------------------------
 // 1. Configurações Específicas por Tipo de Nó

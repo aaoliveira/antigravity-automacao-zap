@@ -143,3 +143,22 @@
   - Versionamento imutável implementado com incremento automático de `versionNumber` em `flow_versions` e bloqueio de publicação para fluxos inválidos.
 - **Consequências:**
   - Positivas: 100% de cobertura nos requisitos do domínio, validação rigorosa antes de persistir versões ativas, proteção multi-tenant validada com testes unitários e de integração E2E.
+
+
+---
+
+## ADR-009: Implementação do Workflow Execution Engine, Catálogo de Handlers e Sistema de Espera/Retomada
+
+- **Status:** Aprovado e Implementado
+- **Data:** 2026-11-13
+- **Contexto:**
+  O Prompt 03 exigiu a criação do motor de execução dos fluxos conversacionais (Workflow Execution Engine) capaz de interpretar e executar grafos publicados independentemente do frontend, com suporte a ciclo completo de espera e retomada, controle estrito de transições de estado, catálogo de 26 handlers de nós, avaliação segura de condições, Outbox Pattern e resiliência contra concorrência e falhas de rede.
+- **Decisão:**
+  - Implementada a máquina de estados `ExecutionStateMachine` com validação de transições permitidas e controle de estados terminais (`PENDING`, `RUNNING`, `WAITING_FOR_INPUT`, `WAITING_FOR_DELAY`, `PAUSED`, `COMPLETED`, `FAILED`, `CANCELLED`, `HUMAN_HANDOFF`).
+  - Implementado o catálogo unificado de handlers `NodeHandlerRegistryService` com suporte a todos os 26 tipos de nós previstos (mensagens, interações, perguntas, botões, listas, condições, switch, atrasos, tags e finalizações), suportando notação pontilhada (`message.text`) e underscore (`message_text`).
+  - Sistema de Espera e Retomada: perguntas (`interaction.question` / `message.buttons` / `message.list` / `wait_for_input`) disparam mensagens e transitam para `WAITING_FOR_INPUT`. Respostas subsequentes do cliente são correlacionadas à execução ativa sem abrir novas sessões concorrentes, armazenam a resposta em variável e continuam a navegação do grafo.
+  - Avaliação de condições com operadores relacionais seguros (`ConditionEvaluatorService`) sem utilização de `eval`.
+  - Padrão Outbox (`OutboxService` e tabela `outbox_messages`) persistindo comandos de disparo antes de chamadas de rede com retries exponenciais e Dead Letter Queue (DLQ).
+  - Travas distribuídas no Redis (`ConcurrencyLockService`) por conversa e filtro de idempotência (`IdempotencyService`).
+- **Consequências:**
+  - Positivas: Execuções 100% autônomas no servidor, garantia contra envios duplicados, ausência de race conditions e cobertura integral comprovada por 67 testes automatizados verdes.

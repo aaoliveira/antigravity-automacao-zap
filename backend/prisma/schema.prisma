@@ -41,13 +41,18 @@ enum VariableType {
 }
 
 enum ExecutionStatus {
+  PENDING
   RUNNING
-  WAITING_INPUT
-  WAITING_DELAY
+  WAITING_FOR_INPUT
+  WAITING_FOR_DELAY
+  PAUSED
   COMPLETED
   FAILED
+  CANCELLED
+  HUMAN_HANDOFF
+  WAITING_INPUT
+  WAITING_DELAY
   HANDOVER_HUMAN
-  PAUSED
 }
 
 enum ExecutionNodeStatus {
@@ -62,6 +67,13 @@ enum LogLevel {
   INFO
   WARN
   ERROR
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
 }
 
 // ==========================================
@@ -84,6 +96,9 @@ model Tenant {
   executions       FlowExecution[]
   executionNodes   FlowExecutionNode[]
   executionLogs    FlowExecutionLog[]
+  contacts         Contact[]
+  whatsappInstances WhatsAppInstance[]
+  outboxMessages   OutboxMessage[]
 
   @@map("tenants")
 }
@@ -106,7 +121,45 @@ model User {
 }
 
 // ==========================================
-// 2. AUTOMAÇÃO E VERSIONAMENTO DE FLUXO
+// 2. CONEXÕES WHATSAPP E CONTATOS
+// ==========================================
+
+model WhatsAppInstance {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @db.Uuid
+  instanceName String   @db.VarChar(100)
+  phoneNumber  String?  @db.VarChar(50)
+  status       String   @default("CONNECTED") @db.VarChar(50)
+  createdAt    DateTime @default(now()) @db.Timestamptz
+  updatedAt    DateTime @updatedAt @db.Timestamptz
+
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, instanceName])
+  @@index([tenantId])
+  @@map("whatsapp_instances")
+}
+
+model Contact {
+  id           String          @id @default(uuid()) @db.Uuid
+  tenantId     String          @db.Uuid
+  phone        String          @db.VarChar(50)
+  name         String?         @db.VarChar(255)
+  tags         String[]        @default([])
+  customFields Json?           @default("{}")
+  createdAt    DateTime        @default(now()) @db.Timestamptz
+  updatedAt    DateTime        @updatedAt @db.Timestamptz
+
+  tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  executions   FlowExecution[]
+
+  @@unique([tenantId, phone])
+  @@index([tenantId])
+  @@map("contacts")
+}
+
+// ==========================================
+// 3. AUTOMAÇÃO E VERSIONAMENTO DE FLUXO
 // ==========================================
 
 model Automation {
@@ -156,7 +209,7 @@ model FlowVersion {
 }
 
 // ==========================================
-// 3. GATILHOS E VARIÁVEIS
+// 4. GATILHOS E VARIÁVEIS
 // ==========================================
 
 model AutomationTrigger {
@@ -198,7 +251,7 @@ model FlowVariable {
 }
 
 // ==========================================
-// 4. EXECUÇÃO, PASSOS E LOGS
+// 5. EXECUÇÃO, PASSOS E LOGS
 // ==========================================
 
 model FlowExecution {
@@ -206,6 +259,8 @@ model FlowExecution {
   tenantId          String          @db.Uuid
   automationId      String          @db.Uuid
   flowVersionId     String          @db.Uuid
+  contactId         String?         @db.Uuid
+  instanceName      String?         @db.VarChar(100)
   contactPhone      String          @db.VarChar(50)
   contactName       String?         @db.VarChar(255)
   status            ExecutionStatus @default(RUNNING)
@@ -218,6 +273,7 @@ model FlowExecution {
   tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   automation        Automation      @relation(fields: [automationId], references: [id], onDelete: Cascade)
   flowVersion       FlowVersion     @relation(fields: [flowVersionId], references: [id], onDelete: Restrict)
+  contact           Contact?        @relation(fields: [contactId], references: [id], onDelete: SetNull)
   executionNodes    FlowExecutionNode[]
   logs              FlowExecutionLog[]
 
@@ -263,4 +319,30 @@ model FlowExecutionLog {
   @@index([executionId, createdAt])
   @@index([tenantId])
   @@map("flow_execution_logs")
+}
+
+// ==========================================
+// 6. MENSAGENS OUTBOX (OUTBOX PATTERN)
+// ==========================================
+
+model OutboxMessage {
+  id           String       @id @default(uuid()) @db.Uuid
+  tenantId     String       @db.Uuid
+  executionId  String?      @db.Uuid
+  instanceName String       @db.VarChar(100)
+  recipient    String       @db.VarChar(50)
+  messageType  String       @db.VarChar(50) // text, media, buttons, list, etc.
+  payload      Json
+  status       OutboxStatus @default(PENDING)
+  attempts     Int          @default(0)
+  lastError    String?      @db.Text
+  sentAt       DateTime?    @db.Timestamptz
+  createdAt    DateTime     @default(now()) @db.Timestamptz
+  updatedAt    DateTime     @updatedAt @db.Timestamptz
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([tenantId])
+  @@map("outbox_messages")
 }
