@@ -1,0 +1,200 @@
+services:
+  # ============================================================================
+  # 1. BANCO DE DADOS RELACIONAL (POSTGRESQL 16) - ISOLADO INTERNAMENTE
+  # ============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: zap_prod_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - zap_prod_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - zap_prod_internal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ============================================================================
+  # 2. FILAS E CACHE DISTRIBUÍDO (REDIS 7) - ISOLADO INTERNAMENTE
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: zap_prod_redis
+    restart: always
+    command: redis-server --appendonly yes --requirepass "${REDIS_PASSWORD}"
+    volumes:
+      - zap_prod_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - zap_prod_internal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ============================================================================
+  # 3. GATEWAY WHATSAPP (EVOLUTION API V2) - ISOLADO INTERNAMENTE
+  # ============================================================================
+  evolution-api:
+    image: evoapicloud/evolution-api:v2.3.7
+    container_name: zap_prod_evolution_api
+    restart: always
+    environment:
+      SERVER_URL: https://${DOMAIN}
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
+      DATABASE_ENABLED: "false"
+      STORE_MESSAGES: "true"
+      STORE_MESSAGE_UP: "true"
+      STORE_CONTACTS: "true"
+      STORE_CHATS: "true"
+      CLEAN_STORE_CLEANING_INTERVAL: 7200
+      CLEAN_STORE_MESSAGES: "true"
+      CLEAN_STORE_MESSAGE_UP: "true"
+      CLEAN_STORE_CONTACTS: "true"
+      CLEAN_STORE_CHATS: "true"
+      LOG_LEVEL: "ERROR,WARN,INFO"
+      WEBHOOK_GLOBAL_ENABLED: "false"
+    volumes:
+      - zap_prod_evolution_instances:/evolution/instances
+    networks:
+      - zap_prod_internal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ============================================================================
+  # 4. BACKEND API & WORKFLOW ENGINE (NESTJS)
+  # ============================================================================
+  backend:
+    container_name: zap_prod_backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
+      ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY}
+      EVOLUTION_SERVER_URL: http://evolution-api:8080
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      evolution-api:
+        condition: service_started
+    networks:
+      - zap_prod_internal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ============================================================================
+  # 5. FRONTEND VISUAL FLOW BUILDER (NEXT.JS 15 STANDALONE)
+  # ============================================================================
+  frontend:
+    container_name: zap_prod_frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: https://${DOMAIN}
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      NEXT_PUBLIC_API_URL: https://${DOMAIN}
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - zap_prod_internal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "30m"
+        max-file: "5"
+
+  # ============================================================================
+  # 6. REVERSE PROXY NGINX (HTTP/HTTPS & SSL TERMINATION)
+  # ============================================================================
+  nginx:
+    image: nginx:alpine
+    container_name: zap_prod_nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - zap_prod_certbot_etc:/etc/letsencrypt
+      - zap_prod_certbot_var:/var/www/certbot
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - zap_prod_internal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ============================================================================
+  # 7. CERTBOT - RENOVAÇÃO AUTOMÁTICA DE CERTIFICADOS SSL LET'S ENCRYPT
+  # ============================================================================
+  certbot:
+    image: certbot/certbot:latest
+    container_name: zap_prod_certbot
+    restart: unless-stopped
+    volumes:
+      - zap_prod_certbot_etc:/etc/letsencrypt
+      - zap_prod_certbot_var:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    networks:
+      - zap_prod_internal
+
+volumes:
+  zap_prod_pgdata:
+    name: zap_prod_pgdata
+  zap_prod_redisdata:
+    name: zap_prod_redisdata
+  zap_prod_evolution_instances:
+    name: zap_prod_evolution_instances
+  zap_prod_certbot_etc:
+    name: zap_prod_certbot_etc
+  zap_prod_certbot_var:
+    name: zap_prod_certbot_var
+
+networks:
+  zap_prod_internal:
+    name: zap_prod_internal
+    driver: bridge

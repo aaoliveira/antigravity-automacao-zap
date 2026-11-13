@@ -18,4 +18,5 @@ module.exports = {
     ],
   },
   testMatch: ['**/*.spec.ts', '**/*.spec.tsx', '**/*.test.ts', '**/*.test.tsx'],
+  modulePathIgnorePatterns: ['<rootDir>/.next/'],
 };

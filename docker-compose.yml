@@ -1,10 +1,10 @@
 services:
   # ============================================================================
-  # BANCO DE DADOS RELACIONAL (POSTGRESQL 16)
+  # 1. BANCO DE DADOS RELACIONAL (POSTGRESQL 16)
   # ============================================================================
   postgres:
     image: postgres:16-alpine
-    container_name: zap_builder_postgres
+    container_name: zap_postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -13,39 +13,127 @@ services:
     ports:
       - "${POSTGRES_PORT:-5435}:5432"
     volumes:
-      - zap_builder_pgdata:/var/lib/postgresql/data
+      - zap_pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-antigravity_automacao_zap}"]
       interval: 5s
       timeout: 5s
       retries: 5
     networks:
-      - zap_builder_network
+      - zap_network
 
   # ============================================================================
-  # FILAS E CACHE (REDIS 7)
+  # 2. FILAS E CACHE DISTRIBUÍDO (REDIS 7)
   # ============================================================================
   redis:
     image: redis:7-alpine
-    container_name: zap_builder_redis
+    container_name: zap_redis
     restart: unless-stopped
+    command: redis-server --appendonly yes
     ports:
       - "${REDIS_PORT:-6382}:6379"
     volumes:
-      - zap_builder_redisdata:/data
+      - zap_redisdata:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
     networks:
-      - zap_builder_network
+      - zap_network
+
+  # ============================================================================
+  # 3. GATEWAY WHATSAPP (EVOLUTION API V2)
+  # ============================================================================
+  evolution-api:
+    image: evoapicloud/evolution-api:v2.3.7
+    container_name: zap_evolution_api
+    restart: unless-stopped
+    ports:
+      - "${EVOLUTION_PORT:-8080}:8080"
+    environment:
+      SERVER_URL: ${EVOLUTION_SERVER_URL:-http://localhost:8080}
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:-evolution_dev_global_api_key_change_in_prod}
+      DATABASE_ENABLED: "false"
+      STORE_MESSAGES: "true"
+      STORE_MESSAGE_UP: "true"
+      STORE_CONTACTS: "true"
+      STORE_CHATS: "true"
+      CLEAN_STORE_CLEANING_INTERVAL: 7200
+      CLEAN_STORE_MESSAGES: "true"
+      CLEAN_STORE_MESSAGE_UP: "true"
+      CLEAN_STORE_CONTACTS: "true"
+      CLEAN_STORE_CHATS: "true"
+      LOG_LEVEL: "ERROR,WARN,DEBUG,INFO,LOG,VERBOSE,DARK,WEBHOOKS"
+      WEBHOOK_GLOBAL_ENABLED: "false"
+    volumes:
+      - zap_evolution_instances:/evolution/instances
+    networks:
+      - zap_network
+
+  # ============================================================================
+  # 4. BACKEND API & WORKFLOW EXECUTION ENGINE (NESTJS)
+  # ============================================================================
+  backend:
+    container_name: zap_backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_dev_password}@postgres:5432/${POSTGRES_DB:-antigravity_automacao_zap}?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:-super_secret_jwt_key_at_least_32_characters_long_for_auth}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
+      ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+      EVOLUTION_SERVER_URL: http://evolution-api:8080
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-evolution_dev_global_api_key_change_in_prod}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      evolution-api:
+        condition: service_started
+    networks:
+      - zap_network
+
+  # ============================================================================
+  # 5. FRONTEND VISUAL FLOW BUILDER (NEXT.JS 15)
+  # ============================================================================
+  frontend:
+    container_name: zap_frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3000}
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3001}:3001"
+    environment:
+      PORT: 3001
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3000}
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - zap_network
 
 volumes:
-  zap_builder_pgdata:
-  zap_builder_redisdata:
+  zap_pgdata:
+    name: zap_pgdata
+  zap_redisdata:
+    name: zap_redisdata
+  zap_evolution_instances:
+    name: zap_evolution_instances
 
 networks:
-  zap_builder_network:
-    name: zap_builder_network
+  zap_network:
+    name: zap_network
     driver: bridge

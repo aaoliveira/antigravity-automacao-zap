@@ -1,0 +1,95 @@
+# ============================================================================
+# REDIRECIONAMENTO HTTP -> HTTPS & ACME CHALLENGE
+# ============================================================================
+server {
+    listen 80;
+    server_name ${DOMAIN};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# ============================================================================
+# SERVIDOR HTTPS SEGURO COM CERTIFICADO SSL/TLS
+# ============================================================================
+server {
+    listen 443 ssl http2;
+    server_name ${DOMAIN};
+
+    # Certificados SSL gerenciados pelo Let's Encrypt / Certbot
+    ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+
+    # Parâmetros de Segurança TLS modernos
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:MozSSL:10m;
+    ssl_session_tickets off;
+
+    # Security Headers
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    # Headers de Proxy Reverso
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+
+    # =========================================================================
+    # ROTAS DO BACKEND API (NestJS)
+    # =========================================================================
+    location /automations {
+        proxy_pass http://backend_upstream;
+        proxy_read_timeout 90s;
+    }
+
+    location /whatsapp {
+        proxy_pass http://backend_upstream;
+        proxy_read_timeout 90s;
+    }
+
+    location /webhooks {
+        proxy_pass http://backend_upstream;
+        proxy_read_timeout 90s;
+    }
+
+    location /engine {
+        proxy_pass http://backend_upstream;
+        proxy_read_timeout 90s;
+    }
+
+    location /api {
+        proxy_pass http://backend_upstream;
+        proxy_read_timeout 90s;
+    }
+
+    # Suporte a WebSocket / Real-time
+    location /socket.io {
+        proxy_pass http://backend_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 86400;
+    }
+
+    # =========================================================================
+    # FRONTEND (Next.js 15 Standalone)
+    # =========================================================================
+    location / {
+        proxy_pass http://frontend_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 90s;
+    }
+}
