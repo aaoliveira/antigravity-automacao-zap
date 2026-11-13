@@ -49,29 +49,82 @@ services:
         max-file: "5"
 
   # ============================================================================
-  # 3. GATEWAY WHATSAPP (EVOLUTION API V2) - ISOLADO INTERNAMENTE
+  # 3. PROVISIONAMENTO DO BANCO DA EVOLUTION API (ISOLADO)
+  # ============================================================================
+  evolution-db-init:
+    image: postgres:16-alpine
+    container_name: zap_prod_evolution_db_init
+    restart: "no"
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        psql -h postgres -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -tc "SELECT 1 FROM pg_database WHERE datname = '${EVOLUTION_DB_NAME:-evolution_api}'" | grep -q 1 || psql -h postgres -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -c "CREATE DATABASE \"${EVOLUTION_DB_NAME:-evolution_api}\""
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - zap_prod_internal
+
+  # ============================================================================
+  # 4. GATEWAY WHATSAPP (EVOLUTION API V2) - ISOLADO INTERNAMENTE
   # ============================================================================
   evolution-api:
     image: evoapicloud/evolution-api:v2.3.7
     container_name: zap_prod_evolution_api
     restart: always
     environment:
+      DOCKER_ENV: 'true'
+      SERVER_NAME: evolution
+      SERVER_TYPE: http
+      SERVER_PORT: 8080
       SERVER_URL: https://${DOMAIN}
+      AUTHENTICATION_TYPE: apikey
       AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
-      DATABASE_ENABLED: "false"
-      STORE_MESSAGES: "true"
-      STORE_MESSAGE_UP: "true"
-      STORE_CONTACTS: "true"
-      STORE_CHATS: "true"
-      CLEAN_STORE_CLEANING_INTERVAL: 7200
-      CLEAN_STORE_MESSAGES: "true"
-      CLEAN_STORE_MESSAGE_UP: "true"
-      CLEAN_STORE_CONTACTS: "true"
-      CLEAN_STORE_CHATS: "true"
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: 'true'
+      DATABASE_ENABLED: 'true'
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${EVOLUTION_DB_NAME:-evolution_api}?schema=public
+      DATABASE_CONNECTION_CLIENT_NAME: zap_evolution_prod
+      DATABASE_SAVE_DATA_INSTANCE: 'true'
+      DATABASE_SAVE_DATA_NEW_MESSAGE: 'false'
+      DATABASE_SAVE_MESSAGE_UPDATE: 'false'
+      DATABASE_SAVE_DATA_CONTACTS: 'false'
+      DATABASE_SAVE_DATA_CHATS: 'true'
+      DATABASE_SAVE_DATA_LABELS: 'false'
+      DATABASE_SAVE_DATA_HISTORIC: 'false'
+      DATABASE_SAVE_IS_ON_WHATSAPP: 'false'
+      DATABASE_DELETE_MESSAGE: 'true'
+      CACHE_REDIS_ENABLED: 'true'
+      CACHE_REDIS_URI: redis://:${REDIS_PASSWORD}@redis:6379/6
+      CACHE_REDIS_PREFIX_KEY: evolution
+      CACHE_REDIS_TTL: 604800
+      CACHE_REDIS_SAVE_INSTANCES: 'false'
+      CACHE_LOCAL_ENABLED: 'false'
+      DEL_INSTANCE: 'false'
+      CONFIG_SESSION_PHONE_CLIENT: ZapBuilderProd
+      CONFIG_SESSION_PHONE_NAME: Chrome
+      CORS_ORIGIN: '*'
+      CORS_METHODS: GET,POST,PUT,DELETE
+      CORS_CREDENTIALS: 'true'
       LOG_LEVEL: "ERROR,WARN,INFO"
-      WEBHOOK_GLOBAL_ENABLED: "false"
+      TELEMETRY_ENABLED: 'false'
+      LANGUAGE: pt-BR
     volumes:
       - zap_prod_evolution_instances:/evolution/instances
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      evolution-db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - zap_prod_internal
     logging:
@@ -81,7 +134,7 @@ services:
         max-file: "5"
 
   # ============================================================================
-  # 4. BACKEND API & WORKFLOW ENGINE (NESTJS)
+  # 5. BACKEND API & WORKFLOW ENGINE (NESTJS)
   # ============================================================================
   backend:
     container_name: zap_prod_backend
@@ -107,7 +160,7 @@ services:
       redis:
         condition: service_healthy
       evolution-api:
-        condition: service_started
+        condition: service_healthy
     networks:
       - zap_prod_internal
     logging:
@@ -117,7 +170,7 @@ services:
         max-file: "5"
 
   # ============================================================================
-  # 5. FRONTEND VISUAL FLOW BUILDER (NEXT.JS 15 STANDALONE)
+  # 6. FRONTEND VISUAL FLOW BUILDER (NEXT.JS 15 STANDALONE)
   # ============================================================================
   frontend:
     container_name: zap_prod_frontend
@@ -143,7 +196,7 @@ services:
         max-file: "5"
 
   # ============================================================================
-  # 6. REVERSE PROXY NGINX (HTTP/HTTPS & SSL TERMINATION)
+  # 7. REVERSE PROXY NGINX (HTTP/HTTPS & SSL TERMINATION)
   # ============================================================================
   nginx:
     image: nginx:alpine
@@ -169,7 +222,7 @@ services:
         max-file: "5"
 
   # ============================================================================
-  # 7. CERTBOT - RENOVAÇÃO AUTOMÁTICA DE CERTIFICADOS SSL LET'S ENCRYPT
+  # 8. CERTBOT - RENOVAÇÃO AUTOMÁTICA DE CERTIFICADOS SSL LET'S ENCRYPT
   # ============================================================================
   certbot:
     image: certbot/certbot:latest

@@ -190,16 +190,16 @@ As configurações são definidas no arquivo `.env` na raiz do projeto:
 | `POSTGRES_USER` | `postgres` | Usuário do PostgreSQL |
 | `POSTGRES_PASSWORD` | `postgres_dev_password` | Senha do PostgreSQL |
 | `POSTGRES_DB` | `antigravity_automacao_zap` | Nome do banco de dados |
-| `POSTGRES_PORT` | `5435` | Porta exposta pelo PostgreSQL no host |
+| `POSTGRES_PORT` | `5436` | Porta exposta pelo PostgreSQL no host |
 | `DATABASE_URL` | *(Ver .env.example)* | URL completa de conexão para o Prisma |
 | `REDIS_HOST` | `localhost` (ou `redis`) | Host do servidor Redis |
-| `REDIS_PORT` | `6382` (ou `6379`) | Porta do servidor Redis |
+| `REDIS_PORT` | `6383` (ou `6379`) | Porta do servidor Redis |
 | `REDIS_PASSWORD` | *(Vazio localmente)* | Senha de autenticação do Redis |
 | `JWT_SECRET` | *(Chave segura)* | Chave de assinatura para tokens JWT |
 | `JWT_EXPIRES_IN` | `1d` | Tempo de expiração dos tokens |
 | `ENCRYPTION_MASTER_KEY` | *(64 caracteres hex)* | Chave mestra AES-256-GCM para criptografia |
-| `EVOLUTION_PORT` | `8080` | Porta HTTP da Evolution API |
-| `EVOLUTION_SERVER_URL` | `http://localhost:8080` | URL do gateway da Evolution API |
+| `EVOLUTION_PORT` | `8081` | Porta HTTP da Evolution API |
+| `EVOLUTION_SERVER_URL` | `http://localhost:8081` | URL do gateway da Evolution API |
 | `EVOLUTION_API_KEY` | `evolution_dev_global_api_key_...` | Chave de API global da Evolution API |
 | `NEXT_PUBLIC_API_URL` | `http://localhost:3000` | URL da API consumida pelo navegador no frontend |
 
@@ -242,7 +242,7 @@ Esta opção inicia toda a infraestrutura (PostgreSQL 16, Redis 7, Evolution API
 4. **Acesse as interfaces:**
    - 🖥️ **Frontend Flow Builder:** [http://localhost:3001](http://localhost:3001)
    - 📑 **Swagger API Docs:** [http://localhost:3000/api/docs](http://localhost:3000/api/docs)
-   - ⚡ **Evolution API Gateway:** [http://localhost:8080](http://localhost:8080)
+   - ⚡ **Evolution API Gateway:** [http://localhost:8081](http://localhost:8081)
 
 5. **Para visualizar os logs:**
    ```bash
