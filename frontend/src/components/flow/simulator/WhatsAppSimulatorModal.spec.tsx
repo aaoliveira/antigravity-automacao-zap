@@ -15,7 +15,7 @@ describe('WhatsAppSimulatorModal Component', () => {
       data: {
         label: 'trigger.keyword',
         category: 'trigger',
-        config: { keywords: ['olá'] },
+        config: { keywords: ['olá', 'preço'] },
       },
     },
     {
@@ -51,7 +51,11 @@ describe('WhatsAppSimulatorModal Component', () => {
     { id: 'e2', source: 'msg-1', target: 'msg-vendas', sourceHandle: 'btn_vendas' },
   ];
 
-  it('deve renderizar a interface do WhatsApp Simulator e apresentar os botões interativos', async () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('deve renderizar a interface do simulador aguardando a interação e palavra-chave inicial do cliente', () => {
     render(
       <WhatsAppSimulatorModal
         isOpen={true}
@@ -63,9 +67,50 @@ describe('WhatsAppSimulatorModal Component', () => {
     );
 
     expect(screen.getByText('WhatsApp Simulator')).toBeInTheDocument();
-    expect(screen.getByText('Variáveis da Sessão')).toBeInTheDocument();
+    expect(screen.getByText('Simulação de Interação do Cliente')).toBeInTheDocument();
+    expect(screen.getByText('"olá"')).toBeInTheDocument();
+    expect(screen.getByText('"preço"')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Envie uma palavra do gatilho/i)).toBeInTheDocument();
+  });
 
-    // Aguarda o bot enviar a mensagem de botões
+  it('deve alertar o usuário quando a mensagem enviada não corresponder a nenhum gatilho', async () => {
+    render(
+      <WhatsAppSimulatorModal
+        isOpen={true}
+        onClose={onCloseMock}
+        nodes={nodes}
+        edges={edges}
+        onHighlightNode={onHighlightNodeMock}
+      />,
+    );
+
+    const input = screen.getByPlaceholderText(/Envie uma palavra do gatilho/i);
+    fireEvent.change(input, { target: { value: 'mensagem aleatoria desconhecida' } });
+    fireEvent.submit(input.closest('form')!);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Nenhum gatilho ativado para "mensagem aleatoria desconhecida"/i),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('deve disparar o fluxo quando o cliente envia a palavra-chave configurada', async () => {
+    render(
+      <WhatsAppSimulatorModal
+        isOpen={true}
+        onClose={onCloseMock}
+        nodes={nodes}
+        edges={edges}
+        onHighlightNode={onHighlightNodeMock}
+      />,
+    );
+
+    // Clica na sugestão de palavra-chave "olá"
+    const keywordButton = screen.getByText('"olá"');
+    fireEvent.click(keywordButton);
+
+    // Aguarda o bot responder com as opções configuradas
     await waitFor(
       () => {
         expect(screen.getByText('Escolha uma opção:')).toBeInTheDocument();
@@ -74,6 +119,8 @@ describe('WhatsAppSimulatorModal Component', () => {
       },
       { timeout: 3000 },
     );
+
+    expect(onHighlightNodeMock).toHaveBeenCalledWith('trigger-1');
   });
 
   it('deve simular resposta ao clicar em um botão interativo e avançar para o próximo nó', async () => {
@@ -86,6 +133,9 @@ describe('WhatsAppSimulatorModal Component', () => {
         onHighlightNode={onHighlightNodeMock}
       />,
     );
+
+    // Dispara com a palavra-chave
+    fireEvent.click(screen.getByText('"preço"'));
 
     await waitFor(() => expect(screen.getByText('Comprar')).toBeInTheDocument(), {
       timeout: 3000,
