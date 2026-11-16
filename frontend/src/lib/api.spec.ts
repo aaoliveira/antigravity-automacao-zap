@@ -68,4 +68,54 @@ describe('FlowApi Client', () => {
       definition: undefined,
     });
   });
+
+  it('deve listar automações chamando GET /automations', async () => {
+    const mockList = [{ id: '1', name: 'Fluxo 1' }];
+    (apiClient.get as jest.Mock).mockResolvedValueOnce({ data: mockList });
+
+    const result = await FlowApi.listAutomations('PUBLISHED');
+    expect(result).toEqual(mockList);
+    expect(apiClient.get).toHaveBeenCalledWith('/automations', {
+      params: { status: 'PUBLISHED' },
+    });
+  });
+
+  it('deve criar automação chamando POST /automations', async () => {
+    const mockCreated = { id: 'new-id', name: 'Nova Automação' };
+    (apiClient.post as jest.Mock).mockResolvedValueOnce({ data: mockCreated });
+
+    const result = await FlowApi.createAutomation('Nova Automação', 'Desc');
+    expect(result).toEqual(mockCreated);
+    expect(apiClient.post).toHaveBeenCalledWith('/automations', {
+      name: 'Nova Automação',
+      description: 'Desc',
+    });
+  });
+
+  it('deve pausar automação chamando POST /automations/:id/pause', async () => {
+    const mockPaused = { id: 'flow-123', status: 'PAUSED' };
+    (apiClient.post as jest.Mock).mockResolvedValueOnce({ data: mockPaused });
+
+    const result = await FlowApi.pauseAutomation('flow-123');
+    expect(result.status).toBe('PAUSED');
+    expect(apiClient.post).toHaveBeenCalledWith('/automations/flow-123/pause');
+  });
+
+  it('deve reativar automação chamando POST /automations/:id/activate', async () => {
+    const mockActive = { id: 'flow-123', status: 'PUBLISHED' };
+    (apiClient.post as jest.Mock).mockResolvedValueOnce({ data: mockActive });
+
+    const result = await FlowApi.activateAutomation('flow-123');
+    expect(result.status).toBe('PUBLISHED');
+    expect(apiClient.post).toHaveBeenCalledWith('/automations/flow-123/activate');
+  });
+
+  it('deve excluir automação chamando DELETE /automations/:id', async () => {
+    const mockRes = { success: true, message: 'Excluída' };
+    (apiClient.delete as jest.Mock).mockResolvedValueOnce({ data: mockRes });
+
+    const result = await FlowApi.deleteAutomation('flow-123');
+    expect(result.success).toBe(true);
+    expect(apiClient.delete).toHaveBeenCalledWith('/automations/flow-123');
+  });
 });

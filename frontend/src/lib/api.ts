@@ -31,6 +31,21 @@ apiClient.interceptors.request.use((config) => {
 
 export const FlowApi = {
   // Automações
+  async listAutomations(status?: string): Promise<AutomationDetails[]> {
+    const res = await apiClient.get<AutomationDetails[]>('/automations', {
+      params: status ? { status } : undefined,
+    });
+    return res.data;
+  },
+
+  async createAutomation(name: string, description?: string): Promise<AutomationDetails> {
+    const res = await apiClient.post<AutomationDetails>('/automations', {
+      name,
+      description,
+    });
+    return res.data;
+  },
+
   async getAutomation(id: string): Promise<AutomationDetails> {
     const res = await apiClient.get<AutomationDetails>(`/automations/${id}`);
     return res.data;
@@ -40,6 +55,21 @@ export const FlowApi = {
     const payload: any = { currentDraft: definition };
     if (name) payload.name = name;
     const res = await apiClient.put<AutomationDetails>(`/automations/${id}`, payload);
+    return res.data;
+  },
+
+  async pauseAutomation(id: string): Promise<AutomationDetails> {
+    const res = await apiClient.post<AutomationDetails>(`/automations/${id}/pause`);
+    return res.data;
+  },
+
+  async activateAutomation(id: string): Promise<AutomationDetails> {
+    const res = await apiClient.post<AutomationDetails>(`/automations/${id}/activate`);
+    return res.data;
+  },
+
+  async deleteAutomation(id: string): Promise<{ success: boolean; message: string }> {
+    const res = await apiClient.delete<{ success: boolean; message: string }>(`/automations/${id}`);
     return res.data;
   },
 

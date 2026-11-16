@@ -32,11 +32,18 @@ export default function HomePage() {
 
         <div className="flex items-center gap-3">
           <Link
-            href={`/automations/${defaultFlowId}`}
+            href="/automations"
+            className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-2 text-xs font-semibold text-slate-200 hover:border-slate-600 hover:text-white transition"
+          >
+            <Workflow className="h-4 w-4 text-emerald-400" />
+            <span>Gerenciar Fluxos</span>
+          </Link>
+          <Link
+            href="/automations"
             className="flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-emerald-400 transition shadow-lg shadow-emerald-500/20"
           >
             <Plus className="h-4 w-4" />
-            <span>Abrir Construtor Visual</span>
+            <span>Novo Fluxo</span>
           </Link>
         </div>
       </nav>

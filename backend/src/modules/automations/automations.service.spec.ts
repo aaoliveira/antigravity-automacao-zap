@@ -234,7 +234,7 @@ describe('AutomationsService (Unit Tests)', () => {
     });
   });
 
-  describe('pause', () => {
+  describe('pause & activate', () => {
     it('deve atualizar o status da automação para PAUSED', async () => {
       prismaMock.automation.findFirst.mockResolvedValue({
         id: 'auto-1',
@@ -250,6 +250,107 @@ describe('AutomationsService (Unit Tests)', () => {
 
       const updated = await service.pause(tenantA, 'auto-1');
       expect(updated.status).toBe(AutomationStatus.PAUSED);
+    });
+
+    it('deve reativar uma automação pausada para PUBLISHED quando houver versão ativa', async () => {
+      prismaMock.automation.findFirst.mockResolvedValue({
+        id: 'auto-1',
+        tenantId: tenantA,
+        activeVersionId: 'ver-1',
+        versions: [{ id: 'ver-1' }],
+        _count: { versions: 1, executions: 0 },
+      });
+
+      prismaMock.automation.update.mockResolvedValue({
+        id: 'auto-1',
+        status: AutomationStatus.PUBLISHED,
+      });
+
+      const updated = await service.activate(tenantA, 'auto-1');
+      expect(updated.status).toBe(AutomationStatus.PUBLISHED);
+      expect(prismaMock.automation.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'auto-1' },
+          data: { status: AutomationStatus.PUBLISHED },
+        }),
+      );
+    });
+
+    it('deve lançar BadRequestException ao tentar ativar automação sem nenhuma versão', async () => {
+      prismaMock.automation.findFirst.mockResolvedValue({
+        id: 'auto-1',
+        tenantId: tenantA,
+        activeVersionId: null,
+        versions: [],
+        _count: { versions: 0, executions: 0 },
+      });
+
+      await expect(service.activate(tenantA, 'auto-1')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('regras de negócio: restrição de edição e exclusão de automações ativas (PUBLISHED)', () => {
+    it('deve impedir a edição (update) de automação com status PUBLISHED', async () => {
+      prismaMock.automation.findFirst.mockResolvedValue({
+        id: 'auto-pub',
+        tenantId: tenantA,
+        status: AutomationStatus.PUBLISHED,
+        versions: [],
+        _count: { versions: 1, executions: 0 },
+      });
+
+      await expect(
+        service.update(tenantA, 'auto-pub', { name: 'Novo Nome Não Permitido' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('deve permitir a edição (update) de automação quando estiver PAUSED', async () => {
+      prismaMock.automation.findFirst.mockResolvedValue({
+        id: 'auto-paused',
+        tenantId: tenantA,
+        status: AutomationStatus.PAUSED,
+        versions: [],
+        triggers: [],
+        variables: [],
+        _count: { versions: 1, executions: 0 },
+      });
+
+      prismaMock.automation.update.mockResolvedValue({
+        id: 'auto-paused',
+        name: 'Nome Atualizado',
+        status: AutomationStatus.PAUSED,
+      });
+
+      const updated = await service.update(tenantA, 'auto-paused', { name: 'Nome Atualizado' });
+      expect(updated).toBeDefined();
+    });
+
+    it('deve impedir a exclusão (delete) de automação com status PUBLISHED', async () => {
+      prismaMock.automation.findFirst.mockResolvedValue({
+        id: 'auto-pub',
+        tenantId: tenantA,
+        status: AutomationStatus.PUBLISHED,
+        versions: [],
+        _count: { versions: 1, executions: 0 },
+      });
+
+      await expect(service.delete(tenantA, 'auto-pub')).rejects.toThrow(BadRequestException);
+    });
+
+    it('deve permitir a exclusão (delete) de automação quando estiver PAUSED', async () => {
+      prismaMock.automation.findFirst.mockResolvedValue({
+        id: 'auto-paused',
+        tenantId: tenantA,
+        status: AutomationStatus.PAUSED,
+        versions: [],
+        _count: { versions: 1, executions: 0 },
+      });
+
+      prismaMock.automation.delete.mockResolvedValue({ id: 'auto-paused' });
+
+      const res = await service.delete(tenantA, 'auto-paused');
+      expect(res.success).toBe(true);
+      expect(prismaMock.automation.delete).toHaveBeenCalledWith({ where: { id: 'auto-paused' } });
     });
   });
 

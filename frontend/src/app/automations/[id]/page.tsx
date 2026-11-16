@@ -1,15 +1,17 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { FlowBuilder } from '../../../components/flow/FlowBuilder';
 import { FlowApi } from '../../../lib/api';
 import { AutomationDetails } from '../../../types/flow';
-import { RotateCcw, AlertTriangle } from 'lucide-react';
+import { RotateCcw } from 'lucide-react';
 
 export default function AutomationEditorPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const id = params?.id as string;
+  const isViewMode = searchParams?.get('mode') === 'view';
 
   const [automation, setAutomation] = useState<AutomationDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -85,6 +87,8 @@ export default function AutomationEditorPage() {
       automationId={id}
       initialDefinition={automation?.currentDraft}
       initialName={automation?.name || 'Fluxo WhatsApp'}
+      initialStatus={automation?.status}
+      isViewMode={isViewMode}
     />
   );
 }

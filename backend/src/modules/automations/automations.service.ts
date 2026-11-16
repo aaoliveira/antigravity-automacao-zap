@@ -212,6 +212,13 @@ export class AutomationsService {
         },
       });
     } else {
+      // Regra de negócio: Para editar um fluxo criado, ele precisa estar pausado ou inativado
+      if (automation.status === AutomationStatus.PUBLISHED) {
+        throw new BadRequestException(
+          'Para editar uma automação ativa, é necessário pausá-la ou inativá-la previamente.',
+        );
+      }
+
       const dataToUpdate: any = {};
       if (dto.name !== undefined) dataToUpdate.name = dto.name;
       if (dto.description !== undefined) dataToUpdate.description = dto.description;
@@ -237,6 +244,13 @@ export class AutomationsService {
    */
   async delete(tenantId: string, id: string) {
     const automation = await this.findOne(tenantId, id);
+
+    // Regra de negócio: Para excluir um fluxo criado, ele precisa estar pausado ou inativado
+    if (automation.status === AutomationStatus.PUBLISHED) {
+      throw new BadRequestException(
+        'Para excluir uma automação ativa, é necessário pausá-la ou inativá-la previamente.',
+      );
+    }
 
     // Se possui execuções históricas, arquiva para preservar rastreabilidade
     if (automation.executionCount > 0) {
@@ -366,6 +380,26 @@ export class AutomationsService {
     const updated = await this.prisma.automation.update({
       where: { id },
       data: { status: AutomationStatus.PAUSED },
+    });
+
+    return updated;
+  }
+
+  /**
+   * Reativa uma automação pausada/inativada
+   */
+  async activate(tenantId: string, id: string) {
+    const automation = await this.findOne(tenantId, id);
+
+    if (!automation.activeVersionId && (!automation.versions || automation.versions.length === 0)) {
+      throw new BadRequestException(
+        'Esta automação não possui versão publicada para ser ativada.',
+      );
+    }
+
+    const updated = await this.prisma.automation.update({
+      where: { id },
+      data: { status: AutomationStatus.PUBLISHED },
     });
 
     return updated;

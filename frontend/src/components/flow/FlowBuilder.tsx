@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   ReactFlow,
   Controls,
@@ -17,6 +18,14 @@ import {
   ReactFlowProvider,
   useReactFlow,
 } from '@xyflow/react';
+import {
+  ShieldAlert,
+  Trash2,
+  Pause,
+  RotateCcw,
+  CheckCircle,
+  X,
+} from 'lucide-react';
 
 import {
   CustomFlowNode,
@@ -49,20 +58,34 @@ interface FlowBuilderProps {
   automationId: string;
   initialDefinition?: WorkflowDefinition;
   initialName?: string;
+  initialStatus?: 'DRAFT' | 'PUBLISHED' | 'PAUSED' | 'ARCHIVED';
+  isViewMode?: boolean;
 }
 
 export function FlowBuilderInner({
   automationId,
   initialDefinition,
   initialName = 'Novo Fluxo de Atendimento',
+  initialStatus = 'DRAFT',
+  isViewMode = false,
 }: FlowBuilderProps) {
+  const router = useRouter();
   const { screenToFlowPosition, fitView } = useReactFlow();
 
   // Estados principais
+  const [viewMode, setViewMode] = useState(isViewMode);
+  const [flowStatus, setFlowStatus] = useState(initialStatus);
   const [flowName, setFlowName] = useState(initialName);
   const [nodes, setNodes] = useState<CustomFlowNode[]>([]);
   const [edges, setEdges] = useState<CustomFlowEdge[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  // Modais de Ações do Modo Visualização
+  const [blockModal, setBlockModal] = useState<{
+    action: 'edit' | 'delete';
+  } | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [isActionLoading, setIsActionLoading] = useState(false);
 
   // Histórico para Undo/Redo
   const [history, setHistory] = useState<HistoryState[]>([]);
@@ -71,7 +94,7 @@ export function FlowBuilderInner({
 
   // Status e Painéis
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
-  const [isCatalogOpen, setIsCatalogOpen] = useState(true);
+  const [isCatalogOpen, setIsCatalogOpen] = useState(!isViewMode);
   const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [validationModalOpen, setValidationModalOpen] = useState(false);
@@ -81,6 +104,16 @@ export function FlowBuilderInner({
   // Instâncias e Conexões
   const [instances, setInstances] = useState<any[]>([]);
   const [selectedInstanceId, setSelectedInstanceId] = useState<string>('');
+
+  // Sincroniza viewMode e status caso propriedades externas mudem
+  useEffect(() => {
+    setViewMode(isViewMode);
+    setIsCatalogOpen(!isViewMode);
+  }, [isViewMode]);
+
+  useEffect(() => {
+    if (initialStatus) setFlowStatus(initialStatus);
+  }, [initialStatus]);
 
   // Timer para Autosave
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -196,6 +229,7 @@ export function FlowBuilderInner({
 
   // Debounced Autosave (2.5s)
   const triggerAutosave = () => {
+    if (viewMode) return;
     setSaveStatus('unsaved');
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
 
@@ -242,6 +276,7 @@ export function FlowBuilderInner({
   }, [automationId, flowName, nodes, edges]);
 
   const executeSave = async () => {
+    if (viewMode) return;
     setSaveStatus('saving');
     try {
       const definition = buildWorkflowDefinition();
@@ -254,6 +289,7 @@ export function FlowBuilderInner({
 
   // Undo e Redo
   const handleUndo = useCallback(() => {
+    if (viewMode) return;
     if (historyIndex > 0) {
       isUndoRedoAction.current = true;
       const targetState = history[historyIndex - 1];
@@ -262,9 +298,10 @@ export function FlowBuilderInner({
       setHistoryIndex((prev) => prev - 1);
       triggerAutosave();
     }
-  }, [history, historyIndex]);
+  }, [history, historyIndex, viewMode]);
 
   const handleRedo = useCallback(() => {
+    if (viewMode) return;
     if (historyIndex < history.length - 1) {
       isUndoRedoAction.current = true;
       const targetState = history[historyIndex + 1];
@@ -273,11 +310,12 @@ export function FlowBuilderInner({
       setHistoryIndex((prev) => prev + 1);
       triggerAutosave();
     }
-  }, [history, historyIndex]);
+  }, [history, historyIndex, viewMode]);
 
   // Atalhos de teclado (Ctrl+Z, Ctrl+Y, Ctrl+S, Del, etc.)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (viewMode) return;
       // Ignora atalhos se estiver digitando em input ou textarea
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
         return;
@@ -305,11 +343,12 @@ export function FlowBuilderInner({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleUndo, handleRedo, selectedNodeId]);
+  }, [handleUndo, handleRedo, selectedNodeId, viewMode]);
 
   // Adicionar Nó via Drag & Drop ou Clique
   const handleAddNode = useCallback(
     (type: string, position?: { x: number; y: number }) => {
+      if (viewMode) return;
       const catalogItem = getCatalogItemByType(type);
       if (!catalogItem) return;
 
@@ -340,16 +379,18 @@ export function FlowBuilderInner({
       setSelectedNodeId(newNode.id);
       triggerAutosave();
     },
-    [edges, pushToHistory],
+    [edges, pushToHistory, viewMode],
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {
+    if (viewMode) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
-  }, []);
+  }, [viewMode]);
 
   const onDrop = useCallback(
     (event: React.DragEvent) => {
+      if (viewMode) return;
       event.preventDefault();
       const type = event.dataTransfer.getData('application/reactflow');
       if (!type) return;
@@ -508,6 +549,78 @@ export function FlowBuilderInner({
     );
   };
 
+  // Ações do Modo Visualização
+  const handleEditClick = () => {
+    if (flowStatus === 'PUBLISHED') {
+      setBlockModal({ action: 'edit' });
+    } else {
+      setViewMode(false);
+      setIsCatalogOpen(true);
+      window.history.replaceState(null, '', `/automations/${automationId}`);
+    }
+  };
+
+  const handlePauseAndEdit = async () => {
+    try {
+      setIsActionLoading(true);
+      await FlowApi.pauseAutomation(automationId);
+      setFlowStatus('PAUSED');
+      setBlockModal(null);
+      setViewMode(false);
+      setIsCatalogOpen(true);
+      window.history.replaceState(null, '', `/automations/${automationId}`);
+    } catch (err: any) {
+      alert(`Erro ao inativar fluxo: ${err.message}`);
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleInactivate = async () => {
+    try {
+      setIsActionLoading(true);
+      await FlowApi.pauseAutomation(automationId);
+      setFlowStatus('PAUSED');
+    } catch (err: any) {
+      alert(`Erro ao inativar fluxo: ${err.message}`);
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleActivate = async () => {
+    try {
+      setIsActionLoading(true);
+      await FlowApi.activateAutomation(automationId);
+      setFlowStatus('PUBLISHED');
+    } catch (err: any) {
+      alert(`Erro ao ativar fluxo: ${err.message}`);
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleDeleteClick = () => {
+    if (flowStatus === 'PUBLISHED') {
+      setBlockModal({ action: 'delete' });
+    } else {
+      setDeleteConfirmOpen(true);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    try {
+      setIsActionLoading(true);
+      await FlowApi.deleteAutomation(automationId);
+      setDeleteConfirmOpen(false);
+      router.push('/automations');
+    } catch (err: any) {
+      alert(`Erro ao excluir fluxo: ${err.message}`);
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
   const selectedNode = useMemo(() => {
     return nodes.find((n) => n.id === selectedNodeId) || null;
   }, [nodes, selectedNodeId]);
@@ -525,29 +638,41 @@ export function FlowBuilderInner({
         onPublish={handlePublish}
         onUndo={handleUndo}
         onRedo={handleRedo}
-        canUndo={historyIndex > 0}
-        canRedo={historyIndex < history.length - 1}
+        canUndo={historyIndex > 0 && !viewMode}
+        canRedo={historyIndex < history.length - 1 && !viewMode}
         errorCount={validationErrors.length}
         instances={instances}
         selectedInstanceId={selectedInstanceId}
         onSelectInstance={setSelectedInstanceId}
+        isViewMode={viewMode}
+        flowStatus={flowStatus}
+        onBack={() => router.push('/automations')}
+        onEdit={handleEditClick}
+        onInactivate={handleInactivate}
+        onActivate={handleActivate}
+        onDelete={handleDeleteClick}
       />
 
       {/* Área Central: Canvas do React Flow */}
       <div className="relative flex-1" onDrop={onDrop} onDragOver={onDragOver}>
-        {/* Painel Esquerdo: Catálogo de Blocos */}
-        <BlockCatalogSidebar
-          isOpen={isCatalogOpen}
-          onToggle={() => setIsCatalogOpen(!isCatalogOpen)}
-          onAddNode={(type) => handleAddNode(type)}
-        />
+        {/* Painel Esquerdo: Catálogo de Blocos (Apenas no Modo Edição) */}
+        {!viewMode && (
+          <BlockCatalogSidebar
+            isOpen={isCatalogOpen}
+            onToggle={() => setIsCatalogOpen(!isCatalogOpen)}
+            onAddNode={(type) => handleAddNode(type)}
+          />
+        )}
 
         <ReactFlow
           nodes={nodes}
           edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
+          onNodesChange={!viewMode ? onNodesChange : undefined}
+          onEdgesChange={!viewMode ? onEdgesChange : undefined}
+          onConnect={!viewMode ? onConnect : undefined}
+          nodesDraggable={!viewMode}
+          nodesConnectable={!viewMode}
+          elementsSelectable={true}
           nodeTypes={nodeTypes}
           onNodeClick={(_, node) => setSelectedNodeId(node.id)}
           onPaneClick={() => setSelectedNodeId(null)}
@@ -580,9 +705,9 @@ export function FlowBuilderInner({
           <NodeConfigDrawer
             selectedNode={selectedNode}
             onClose={() => setSelectedNodeId(null)}
-            onUpdateConfig={handleUpdateNodeConfig}
-            onDuplicateNode={handleDuplicateNode}
-            onDeleteNode={handleDeleteNode}
+            onUpdateConfig={!viewMode ? handleUpdateNodeConfig : () => {}}
+            onDuplicateNode={!viewMode ? handleDuplicateNode : undefined}
+            onDeleteNode={!viewMode ? handleDeleteNode : undefined}
           />
         )}
       </div>
@@ -604,6 +729,111 @@ export function FlowBuilderInner({
         warnings={validationWarnings}
         onSelectNode={(nodeId) => setSelectedNodeId(nodeId)}
       />
+
+      {/* MODAL: Regra de Negócio para Fluxo Ativo (Bloqueio ou Inativação Prévia) */}
+      {blockModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl border border-amber-500/40 bg-slate-900 p-6 shadow-2xl">
+            <div className="flex items-center gap-3 text-amber-400 mb-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20">
+                <ShieldAlert className="h-6 w-6" />
+              </div>
+              <h3 className="text-base font-bold text-white">
+                {blockModal.action === 'edit'
+                  ? 'Inativação Necessária para Edição'
+                  : 'Não é Possível Excluir Fluxo Ativo'}
+              </h3>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              {blockModal.action === 'edit' ? (
+                <>
+                  O fluxo <strong className="text-white">"{flowName}"</strong> está
+                  atualmente <span className="text-emerald-400 font-semibold">Ativo em produção</span>.
+                  Pelas regras de governança e integridade, para editar a estrutura ou mensagens de um
+                  fluxo, ele precisa estar <strong>pausado ou inativado</strong>.
+                </>
+              ) : (
+                <>
+                  O fluxo <strong className="text-white">"{flowName}"</strong> está
+                  atualmente <span className="text-emerald-400 font-semibold">Ativo em produção</span>.
+                  Para excluir um fluxo criado, ele precisa estar{' '}
+                  <strong>pausado, parado ou inativado previamente</strong>.
+                </>
+              )}
+            </p>
+
+            <div className="mt-6 flex items-center justify-end gap-2.5">
+              <button
+                onClick={() => setBlockModal(null)}
+                className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700 transition"
+              >
+                Cancelar
+              </button>
+
+              {blockModal.action === 'edit' && (
+                <button
+                  onClick={handlePauseAndEdit}
+                  disabled={isActionLoading}
+                  className="flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-amber-400 transition"
+                >
+                  {isActionLoading && <RotateCcw className="h-3.5 w-3.5 animate-spin" />}
+                  <span>Inativar e Editar</span>
+                </button>
+              )}
+
+              {blockModal.action === 'delete' && (
+                <button
+                  onClick={async () => {
+                    setBlockModal(null);
+                    await handleInactivate();
+                  }}
+                  className="flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-amber-400 transition"
+                >
+                  <Pause className="h-3.5 w-3.5 fill-current" />
+                  <span>Inativar Agora</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Confirmação de Exclusão */}
+      {deleteConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl border border-rose-500/40 bg-slate-900 p-6 shadow-2xl">
+            <div className="flex items-center gap-3 text-rose-400 mb-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/20">
+                <Trash2 className="h-6 w-6" />
+              </div>
+              <h3 className="text-base font-bold text-white">Confirmar Exclusão</h3>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Tem certeza que deseja excluir o fluxo <strong className="text-white">"{flowName}"</strong>?
+              Esta ação é irreversível e excluirá todos os nós e configurações.
+            </p>
+
+            <div className="mt-6 flex items-center justify-end gap-2.5">
+              <button
+                onClick={() => setDeleteConfirmOpen(false)}
+                className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={isActionLoading}
+                className="flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-500 transition"
+              >
+                {isActionLoading && <RotateCcw className="h-3.5 w-3.5 animate-spin" />}
+                <span>Confirmar Exclusão</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

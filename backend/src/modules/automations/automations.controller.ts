@@ -138,6 +138,19 @@ export class AutomationsController {
     return this.automationsService.pause(tenantId, id);
   }
 
+  @Post(':id/activate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reativar uma automação pausada/inativa' })
+  @ApiParam({ name: 'id', description: 'ID da automação' })
+  @ApiResponse({ status: 200, description: 'Automação reativada.' })
+  @ApiResponse({ status: 400, description: 'Automação sem versão publicada para ativação.' })
+  async activate(
+    @CurrentTenant() tenantId: string,
+    @Param('id') id: string,
+  ) {
+    return this.automationsService.activate(tenantId, id);
+  }
+
   @Get(':id/versions')
   @ApiOperation({ summary: 'Listar o histórico de versões da automação' })
   @ApiParam({ name: 'id', description: 'ID da automação' })

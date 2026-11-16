@@ -87,6 +87,8 @@ export interface AutomationDetails {
   status: 'DRAFT' | 'PUBLISHED' | 'PAUSED' | 'ARCHIVED';
   activeVersionId?: string;
   currentDraft?: WorkflowDefinition;
+  versionCount?: number;
+  executionCount?: number;
   createdAt: string;
   updatedAt: string;
 }

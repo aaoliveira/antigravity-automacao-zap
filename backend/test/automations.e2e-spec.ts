@@ -386,7 +386,48 @@ describe('Automations API (E2E Integration & Multi-tenant Tests)', () => {
       expect(getRes.body.status).toBe('PUBLISHED');
     });
 
-    it('DELETE /automations/:id: deve excluir a automação', async () => {
+    it('Regra de Negócio: deve impedir edição de automação enquanto ativa (PUBLISHED)', async () => {
+      const res = await request(app.getHttpServer())
+        .put(`/automations/${automationId}`)
+        .set('x-tenant-id', tenantA)
+        .send({ name: 'Tentativa de alteração de fluxo ativo' })
+        .expect(400);
+
+      expect(res.body.message).toContain('pausá-la ou inativá-la previamente');
+    });
+
+    it('Regra de Negócio: deve impedir exclusão de automação enquanto ativa (PUBLISHED)', async () => {
+      const res = await request(app.getHttpServer())
+        .delete(`/automations/${automationId}`)
+        .set('x-tenant-id', tenantA)
+        .expect(400);
+
+      expect(res.body.message).toContain('pausá-la ou inativá-la previamente');
+    });
+
+    it('POST /automations/:id/activate: deve permitir alternar entre pausado e ativo', async () => {
+      // 1. Pausa o fluxo
+      const pauseRes = await request(app.getHttpServer())
+        .post(`/automations/${automationId}/pause`)
+        .set('x-tenant-id', tenantA)
+        .expect(200);
+      expect(pauseRes.body.status).toBe('PAUSED');
+
+      // 2. Reativa o fluxo
+      const activateRes = await request(app.getHttpServer())
+        .post(`/automations/${automationId}/activate`)
+        .set('x-tenant-id', tenantA)
+        .expect(200);
+      expect(activateRes.body.status).toBe('PUBLISHED');
+
+      // 3. Pausa novamente para permitir edição e exclusão
+      await request(app.getHttpServer())
+        .post(`/automations/${automationId}/pause`)
+        .set('x-tenant-id', tenantA)
+        .expect(200);
+    });
+
+    it('DELETE /automations/:id: deve excluir a automação quando pausada/inativa', async () => {
       const res = await request(app.getHttpServer())
         .delete(`/automations/${automationId}`)
         .set('x-tenant-id', tenantA)

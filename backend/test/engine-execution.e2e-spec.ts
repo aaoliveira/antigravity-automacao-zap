@@ -231,6 +231,8 @@ describe('Workflow Execution Engine (E2E Integration Tests)', () => {
       const def = JSON.parse(JSON.stringify(flowVersion?.definition));
       def.nodes[1].config.expression = '15'; // Menor que 18
 
+      // Para editar, é necessário pausar previamente
+      await automations.pause(tenantId, conditionAutoId);
       await automations.update(tenantId, conditionAutoId, { currentDraft: def });
       await automations.publish(tenantId, conditionAutoId, 'user-1');
 
