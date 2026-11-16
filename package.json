@@ -35,5 +35,9 @@
     "nestjs"
   ],
   "author": "Antigravity Engineering Team",
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/mocha": "^10.0.10"
+  }
 }
