@@ -31,11 +31,12 @@ import { NodeConfigDrawer } from './drawer/NodeConfigDrawer';
 import { WhatsAppSimulatorModal } from './simulator/WhatsAppSimulatorModal';
 import { ValidationErrorsModal } from './validation/ValidationErrorsModal';
 import { FlowApi } from '../../lib/api';
-import { getCatalogItemByType } from '../../lib/default-nodes';
+import { getCatalogItemByType, NODE_CATALOG } from '../../lib/default-nodes';
 import { generateId } from '../../lib/utils';
 
 const nodeTypes: any = {
   custom: CustomNodeComponent,
+  ...NODE_CATALOG.reduce((acc, item) => ({ ...acc, [item.type]: CustomNodeComponent }), {}),
 };
 
 // Histórico para Desfazer / Refazer (Undo/Redo)
@@ -203,17 +204,47 @@ export function FlowBuilderInner({
     }, 2500);
   };
 
+  const buildWorkflowDefinition = useCallback((): WorkflowDefinition => {
+    const normalizedNodes = nodes.map((n) => {
+      const rawType =
+        (n.data as any)?.nodeType ||
+        (n.data as any)?.type ||
+        getCatalogItemByType((n.data as any)?.label)?.type ||
+        (n.type !== 'custom' ? n.type : undefined) ||
+        (n.data as any)?.label ||
+        n.type;
+
+      const rawConfig = (n.data as any)?.config || (n as any).config || {};
+      const catalogItem = getCatalogItemByType(rawType);
+
+      return {
+        ...n,
+        type: rawType,
+        config: rawConfig,
+        data: {
+          ...n.data,
+          nodeType: rawType as any,
+          type: rawType as any,
+          label: catalogItem?.label || n.data?.label || rawType,
+          category: catalogItem?.category || n.data?.category || 'action',
+          config: rawConfig,
+        },
+      };
+    });
+
+    return {
+      schemaVersion: '1.0.0',
+      flowId: automationId,
+      name: flowName,
+      nodes: normalizedNodes,
+      edges,
+    };
+  }, [automationId, flowName, nodes, edges]);
+
   const executeSave = async () => {
     setSaveStatus('saving');
     try {
-      const definition: WorkflowDefinition = {
-        schemaVersion: '1.0.0',
-        flowId: automationId,
-        name: flowName,
-        nodes,
-        edges,
-      };
-
+      const definition = buildWorkflowDefinition();
       await FlowApi.updateDraft(automationId, definition, flowName);
       setSaveStatus('saved');
     } catch {
@@ -292,7 +323,9 @@ export function FlowBuilderInner({
         type: 'custom',
         position: pos,
         data: {
-          label: catalogItem.type,
+          nodeType: catalogItem.type as any,
+          type: catalogItem.type as any,
+          label: catalogItem.label,
           category: catalogItem.category,
           config: { ...catalogItem.defaultConfig },
         },
@@ -403,13 +436,7 @@ export function FlowBuilderInner({
   const handleValidate = async () => {
     setIsValidating(true);
     try {
-      const definition: WorkflowDefinition = {
-        schemaVersion: '1.0.0',
-        flowId: automationId,
-        name: flowName,
-        nodes,
-        edges,
-      };
+      const definition = buildWorkflowDefinition();
 
       const result = await FlowApi.validateFlow(automationId, definition);
       setValidationErrors(result.errors || []);
@@ -442,13 +469,7 @@ export function FlowBuilderInner({
   // Publicação de Versão
   const handlePublish = async () => {
     setSaveStatus('saving');
-    const definition: WorkflowDefinition = {
-      schemaVersion: '1.0.0',
-      flowId: automationId,
-      name: flowName,
-      nodes,
-      edges,
-    };
+    const definition = buildWorkflowDefinition();
 
     try {
       // Garante persistência prévia do rascunho no banco antes da publicação

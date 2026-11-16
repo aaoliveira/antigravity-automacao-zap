@@ -23,7 +23,14 @@ import {
 } from './flow-validator.types';
 
 // Nós que pausam a execução aguardando tempo ou interação do usuário
-const BLOCKING_NODE_TYPES: FlowNodeType[] = ['question_input', 'wait_reply', 'delay'];
+const BLOCKING_NODE_TYPES: string[] = [
+  'question_input',
+  'wait_reply',
+  'delay',
+  'interaction.question',
+  'logic.delay',
+  'logic.wait_for_input',
+];
 
 // Variáveis de sistema e contato sempre disponíveis
 const SYSTEM_VARIABLES = new Set([
@@ -95,7 +102,8 @@ export class FlowValidatorService {
         nodeMap.set(node.id, node);
       }
 
-      const normType = this.normalizeNodeType(node.type);
+      const rawType = this.getNodeType(node);
+      const normType = this.normalizeNodeType(node);
       if (normType === 'trigger') {
         triggerCount++;
       }
@@ -106,7 +114,7 @@ export class FlowValidatorService {
       // 2.4 Validação de compatibilidade com capacidades do provedor selecionado
       if (options?.capabilities) {
         const caps = options.capabilities;
-        if ((normType === 'template' || (node.type as string) === 'message.template') && !caps.template) {
+        if ((normType === 'template' || rawType === 'message.template') && !caps.template) {
           errors.push({
             nodeId: node.id,
             field: 'type',
@@ -115,7 +123,7 @@ export class FlowValidatorService {
           });
         }
 
-        if ((normType === 'buttons' || (node.type as string) === 'message.buttons') && !caps.buttons) {
+        if ((normType === 'buttons' || rawType === 'message.buttons') && !caps.buttons) {
           if (options.allowFallback === false) {
             errors.push({
               nodeId: node.id,
@@ -133,7 +141,7 @@ export class FlowValidatorService {
           }
         }
 
-        if ((normType === 'list' || (node.type as string) === 'message.list') && !caps.list) {
+        if ((normType === 'list' || rawType === 'message.list') && !caps.list) {
           if (options.allowFallback === false) {
             errors.push({
               nodeId: node.id,
@@ -246,7 +254,7 @@ export class FlowValidatorService {
 
       // 4.6 Restrição: Gatilho não pode ter aresta de entrada
       const targetNode = nodeMap.get(edge.target);
-      if (this.normalizeNodeType(targetNode?.type || '') === 'trigger') {
+      if (targetNode && this.normalizeNodeType(targetNode) === 'trigger') {
         errors.push({
           edgeId: edge.id,
           nodeId: edge.target,
@@ -258,15 +266,17 @@ export class FlowValidatorService {
 
       // 4.7 Restrição: Nós de encerramento não podem ter arestas de saída
       const sourceNode = nodeMap.get(edge.source);
-      const normSourceType = this.normalizeNodeType(sourceNode?.type || '');
-      if (normSourceType === 'end_flow' || normSourceType === 'human_transfer') {
-        errors.push({
-          edgeId: edge.id,
-          nodeId: edge.source,
-          field: 'source',
-          message: `O nó "${edge.source}" (${sourceNode?.type}) encerra o fluxo e não pode ter conexões de saída.`,
-          code: ValidationCodes.END_NODE_HAS_OUTGOING,
-        });
+      if (sourceNode) {
+        const normSourceType = this.normalizeNodeType(sourceNode);
+        if (normSourceType === 'end_flow' || normSourceType === 'human_transfer') {
+          errors.push({
+            edgeId: edge.id,
+            nodeId: edge.source,
+            field: 'source',
+            message: `O nó "${edge.source}" (${this.getNodeType(sourceNode)}) encerra o fluxo e não pode ter conexões de saída.`,
+            code: ValidationCodes.END_NODE_HAS_OUTGOING,
+          });
+        }
       }
 
       // Agrupa conexões
@@ -280,7 +290,7 @@ export class FlowValidatorService {
     // 5. Validação de Portas e Caminhos Obrigatórios
     for (const [nodeId, node] of nodeMap.entries()) {
       const outgoing = outgoingByNode.get(nodeId) || [];
-      const nodeNormalizedType = this.normalizeNodeType(node.type);
+      const nodeNormalizedType = this.normalizeNodeType(node);
 
       switch (nodeNormalizedType) {
         case 'condition': {
@@ -424,7 +434,7 @@ export class FlowValidatorService {
             errors.push({
               nodeId,
               field: 'edges',
-              message: `O nó "${nodeId}" (${node.type}) não possui conexão de saída. O fluxo deve continuar ou terminar em nó de encerramento.`,
+              message: `O nó "${nodeId}" (${this.getNodeType(node)}) não possui conexão de saída. O fluxo deve continuar ou terminar em nó de encerramento.`,
               code: ValidationCodes.MISSING_MANDATORY_OUTPUT_EDGE,
             });
           }
@@ -452,17 +462,18 @@ export class FlowValidatorService {
     warnings: ValidationErrorDetail[],
     declaredVariables: Set<string>,
   ): void {
-    const cfg = node.config || {};
-    const normType = this.normalizeNodeType(node.type);
+    const cfg = this.getNodeConfig(node);
+    const rawType = this.getNodeType(node);
+    const normType = this.normalizeNodeType(rawType);
 
     switch (normType) {
       case 'trigger': {
         const c = cfg as TriggerNodeConfig;
         const triggerType =
           c.triggerType ||
-          ((node.type as string) === 'trigger.keyword'
+          (rawType === 'trigger.keyword'
             ? 'contains_keyword'
-            : (node.type as string) === 'trigger.message_received'
+            : rawType === 'trigger.message_received'
             ? 'any_message'
             : undefined);
 
@@ -912,7 +923,12 @@ export class FlowValidatorService {
 
           const hasBlockingNode = cycleNodes.some((id) => {
             const n = nodeMap.get(id);
-            return n && BLOCKING_NODE_TYPES.includes(n.type);
+            return (
+              n &&
+              (BLOCKING_NODE_TYPES.includes(n.type) ||
+                BLOCKING_NODE_TYPES.includes(this.normalizeNodeType(n)) ||
+                BLOCKING_NODE_TYPES.includes(this.getNodeType(n)))
+            );
           });
 
           if (!hasBlockingNode) {
@@ -937,13 +953,50 @@ export class FlowValidatorService {
   }
 
   /**
+   * Obtém o tipo real do nó, suportando tanto formato canônico quanto payload do React Flow (data.nodeType)
+   */
+  public getNodeType(node?: FlowNode): string {
+    if (!node) return '';
+    if (node.type && (node.type as string) !== 'custom') {
+      return node.type;
+    }
+    return (
+      node.data?.nodeType ||
+      node.data?.type ||
+      node.data?.label ||
+      node.type ||
+      ''
+    );
+  }
+
+  /**
+   * Obtém a configuração do nó, priorizando config e realizando fallback para data.config
+   */
+  public getNodeConfig(node?: FlowNode): Record<string, any> {
+    if (!node) return {};
+    if (node.config && Object.keys(node.config).length > 0) {
+      return node.config;
+    }
+    return node.data?.config || node.config || {};
+  }
+
+  /**
    * Normaliza os identificadores de nós entre a sintaxe pontilhada e underscore
    */
-  private normalizeNodeType(type: string): string {
+  public normalizeNodeType(typeOrNode: string | FlowNode): string {
+    const type = typeof typeOrNode === 'string' ? typeOrNode : this.getNodeType(typeOrNode);
     if (!type) return '';
     const t = type.toLowerCase().trim();
-    if (t === 'trigger.message_received' || t === 'trigger.keyword') return 'trigger';
-    if (t === 'message.text') return 'message_text';
+    if (
+      t === 'trigger.message_received' ||
+      t === 'trigger.keyword' ||
+      t === 'trigger' ||
+      t.startsWith('trigger.') ||
+      t.startsWith('trigger_')
+    ) {
+      return 'trigger';
+    }
+    if (t === 'message.text' || t === 'message_text') return 'message_text';
     if (
       [
         'message.image',
@@ -954,21 +1007,22 @@ export class FlowValidatorService {
         'message.location',
         'message.contact',
         'message.template',
+        'message_media',
       ].includes(t)
     ) {
       return 'message_media';
     }
-    if (t === 'message.buttons') return 'buttons';
-    if (t === 'message.list') return 'list_interactive';
-    if (t === 'interaction.question') return 'question_input';
-    if (t === 'interaction.capture') return 'interaction.capture';
+    if (t === 'message.buttons' || t === 'message_buttons' || t === 'buttons') return 'buttons';
+    if (t === 'message.list' || t === 'message_list' || t === 'list_interactive') return 'list_interactive';
+    if (t === 'interaction.question' || t === 'question_input') return 'question_input';
+    if (t === 'interaction.capture' || t === 'set_variable') return 'interaction.capture';
     if (t === 'interaction.choice') return 'buttons';
-    if (t === 'logic.condition') return 'condition';
-    if (t === 'logic.switch') return 'switch';
-    if (t === 'logic.delay') return 'delay';
-    if (t === 'logic.wait_for_input') return 'wait_reply';
-    if (t === 'action.human_handoff') return 'human_transfer';
-    if (t === 'action.end') return 'end_flow';
+    if (t === 'logic.condition' || t === 'condition') return 'condition';
+    if (t === 'logic.switch' || t === 'switch') return 'switch';
+    if (t === 'logic.delay' || t === 'delay') return 'delay';
+    if (t === 'logic.wait_for_input' || t === 'wait_reply') return 'wait_reply';
+    if (t === 'action.human_handoff' || t === 'human_transfer') return 'human_transfer';
+    if (t === 'action.end' || t === 'end_flow') return 'end_flow';
     return t;
   }
 }

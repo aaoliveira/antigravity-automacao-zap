@@ -332,4 +332,64 @@ describe('FlowValidatorService', () => {
     expect(result.isValid).toBe(true);
     expect(result.errors).toHaveLength(0);
   });
+
+  it('deve validar com sucesso fluxo construído pelo editor visual React Flow (nós customizados com data.nodeType)', () => {
+    const visualFlow: WorkflowDefinition = {
+      schemaVersion: '1.0.0',
+      nodes: [
+        {
+          id: 'trigger_kw1',
+          type: 'custom' as any,
+          position: { x: 100, y: 150 },
+          data: {
+            nodeType: 'trigger.keyword',
+            label: 'Palavra-chave',
+            category: 'trigger',
+            config: {
+              keywords: ['olá', 'preço', 'ajuda'],
+              matchType: 'contains',
+            },
+          },
+          config: {},
+        },
+        {
+          id: 'message_text1',
+          type: 'custom' as any,
+          position: { x: 450, y: 150 },
+          data: {
+            nodeType: 'message.text',
+            label: 'Mensagem de Texto',
+            category: 'message',
+            config: {
+              text: 'Olá! Seja bem-vindo ao nosso atendimento.',
+            },
+          },
+          config: {},
+        },
+        {
+          id: 'action_w2s5fxd',
+          type: 'custom' as any,
+          position: { x: 800, y: 150 },
+          data: {
+            nodeType: 'action.end',
+            label: 'Encerrar Fluxo',
+            category: 'action',
+            config: {
+              reason: 'Atendimento concluído com sucesso',
+            },
+          },
+          config: {},
+        },
+      ],
+      edges: [
+        { id: 'e1', source: 'trigger_kw1', target: 'message_text1' },
+        { id: 'e2', source: 'message_text1', target: 'action_w2s5fxd' },
+      ],
+    };
+
+    const result = validator.validate(visualFlow);
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+  });
 });

@@ -33,6 +33,8 @@ export type FlowNodeType =
   | 'action.end';
 
 export interface FlowNodeData {
+  nodeType?: FlowNodeType;
+  type?: FlowNodeType;
   label: string;
   category: 'trigger' | 'message' | 'interaction' | 'logic' | 'action';
   config: Record<string, any>;

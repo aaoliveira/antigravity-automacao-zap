@@ -9,10 +9,17 @@ import { AlertCircle, CheckCircle2, Copy, Trash2, ArrowRight } from 'lucide-reac
 export const CustomFlowNode = memo((props: any) => {
   const { id, data, selected } = props;
   const nodeData = data as FlowNodeData;
-  const catalogItem = getCatalogItemByType(nodeData?.label || '') || getCatalogItemByType(data?.type || '');
+  const rawType =
+    nodeData?.nodeType ||
+    (data as any)?.type ||
+    getCatalogItemByType(nodeData?.label || '')?.type ||
+    nodeData?.label ||
+    props.type ||
+    '';
+  const catalogItem = getCatalogItemByType(rawType) || getCatalogItemByType(nodeData?.label || '');
   const Icon = catalogItem?.icon;
   const color = catalogItem?.color || '#3b82f6';
-  const isTrigger = catalogItem?.category === 'trigger';
+  const isTrigger = catalogItem?.category === 'trigger' || rawType.startsWith('trigger');
 
   // Configuração e prévias
   const config = nodeData?.config || {};
@@ -77,11 +84,11 @@ export const CustomFlowNode = memo((props: any) => {
 
       {/* Conteúdo / Prévia Visual do Nó */}
       <div className="px-3.5 py-3 text-xs text-slate-300">
-        {renderNodePreview(data?.type || '', config)}
+        {renderNodePreview(rawType, config)}
       </div>
 
       {/* Handles de Saída Dinâmicos por Tipo */}
-      {renderOutputHandles(data?.type || '', config)}
+      {renderOutputHandles(rawType, config)}
     </div>
   );
 });

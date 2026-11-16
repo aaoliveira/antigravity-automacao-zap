@@ -496,6 +496,20 @@ export class AutomationsService {
   /**
    * Sincroniza entidades relacionais de gatilhos e variáveis a partir do JSON do fluxo
    */
+  private getNodeType(node: any): string {
+    if (!node) return '';
+    if (node.type && node.type !== 'custom') {
+      return node.type;
+    }
+    return (
+      node.data?.nodeType ||
+      node.data?.type ||
+      node.data?.label ||
+      node.type ||
+      ''
+    );
+  }
+
   private async syncTriggersAndVariables(
     tenantId: string,
     automationId: string,
@@ -503,21 +517,24 @@ export class AutomationsService {
   ): Promise<void> {
     try {
       // 1. Sincroniza Gatilhos
-      const triggerNodes = (definition.nodes || []).filter(
-        (n) =>
-          n.type === 'trigger' ||
-          (n.type as string).startsWith('trigger.') ||
-          (n.type as string).startsWith('trigger_'),
-      );
+      const triggerNodes = (definition.nodes || []).filter((n) => {
+        const type = this.getNodeType(n);
+        return (
+          type === 'trigger' ||
+          type.startsWith('trigger.') ||
+          type.startsWith('trigger_')
+        );
+      });
       await this.prisma.automationTrigger.deleteMany({ where: { automationId } });
 
       for (const node of triggerNodes) {
-        const cfg = node.config || {};
+        const cfg = (node.config && Object.keys(node.config).length > 0 ? node.config : undefined) || node.data?.config || node.config || {};
+        const nodeType = this.getNodeType(node);
         let tType: TriggerType = TriggerType.KEYWORD_EXACT;
         if (
           cfg.triggerType === 'contains_keyword' ||
           cfg.matchType === 'CONTAINS' ||
-          (node.type as string) === 'trigger.keyword'
+          nodeType === 'trigger.keyword'
         ) {
           tType = TriggerType.KEYWORD_CONTAINS;
         }
@@ -528,7 +545,7 @@ export class AutomationsService {
         if (cfg.triggerType === 'first_interaction') tType = TriggerType.FIRST_INTERACTION;
         if (
           cfg.triggerType === 'any_message' ||
-          (node.type as string) === 'trigger.message_received'
+          nodeType === 'trigger.message_received'
         ) {
           tType = TriggerType.ANY_MESSAGE;
         }

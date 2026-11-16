@@ -189,12 +189,14 @@ export class WorkflowEngineService {
     event: InboundEvent,
   ) {
     const definition = flowVersion.definition as unknown as WorkflowDefinition;
-    const triggerNode = definition.nodes.find(
-      (n) =>
-        (n.type as string) === 'trigger' ||
-        (n.type as string).startsWith('trigger.') ||
-        (n.type as string).startsWith('trigger_'),
-    );
+    const triggerNode = definition.nodes.find((n) => {
+      const type = this.getNodeType(n);
+      return (
+        type === 'trigger' ||
+        type.startsWith('trigger.') ||
+        type.startsWith('trigger_')
+      );
+    });
 
     if (!triggerNode) {
       throw new NotFoundException(`Nó de gatilho não encontrado na versão ${flowVersion.versionNumber}`);
@@ -306,9 +308,10 @@ export class WorkflowEngineService {
         return;
       }
 
-      const handler = this.nodeRegistry.getHandler(currentNode.type);
+      const rawNodeType = this.getNodeType(currentNode);
+      const handler = this.nodeRegistry.getHandler(rawNodeType);
       if (!handler) {
-        this.logger.error(`Nenhum handler registrado para o nó ${currentNode.id} (${currentNode.type}).`);
+        this.logger.error(`Nenhum handler registrado para o nó ${currentNode.id} (${rawNodeType}).`);
         await this.finalizeExecution(executionId, ExecutionStatus.FAILED, currentNode.id, variableContext);
         return;
       }
@@ -319,17 +322,26 @@ export class WorkflowEngineService {
           tenantId: variableContext.company.id,
           executionId,
           nodeId: currentNode.id,
-          nodeType: currentNode.type,
+          nodeType: rawNodeType,
           status: ExecutionNodeStatus.RUNNING,
           inputPayload: currentInteraction ? { interaction: currentInteraction } : null,
         },
       });
 
+      const effectiveNode: FlowNode = {
+        ...currentNode,
+        type: rawNodeType as any,
+        config:
+          currentNode.config && Object.keys(currentNode.config).length > 0
+            ? currentNode.config
+            : currentNode.data?.config || currentNode.config || {},
+      };
+
       // Cria contexto de execução do nó
       const nodeContext: NodeExecutionContext = {
         tenantId: variableContext.company.id,
         executionId,
-        node: currentNode,
+        node: effectiveNode,
         flowDefinition: definition,
         variables: variableContext,
         incomingInteraction: currentInteraction,
@@ -726,5 +738,22 @@ export class WorkflowEngineService {
         versionId: flowVersion.id,
       },
     };
+  }
+
+  /**
+   * Obtém o tipo real do nó, com fallback para metadados do React Flow (data.nodeType)
+   */
+  private getNodeType(node?: FlowNode): string {
+    if (!node) return '';
+    if (node.type && (node.type as string) !== 'custom') {
+      return node.type as string;
+    }
+    return (
+      node.data?.nodeType ||
+      node.data?.type ||
+      node.data?.label ||
+      (node.type as string) ||
+      ''
+    );
   }
 }

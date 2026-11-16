@@ -30,7 +30,13 @@ export function NodeConfigDrawer({
 }: NodeConfigDrawerProps) {
   if (!selectedNode) return null;
 
-  const type = selectedNode.data?.label || selectedNode.type || '';
+  const type =
+    selectedNode.data?.nodeType ||
+    (selectedNode.data as any)?.type ||
+    getCatalogItemByType(selectedNode.data?.label || '')?.type ||
+    selectedNode.data?.label ||
+    selectedNode.type ||
+    '';
   const catalogItem = getCatalogItemByType(type);
   const Icon = catalogItem?.icon || Layers;
   const color = catalogItem?.color || '#3b82f6';
