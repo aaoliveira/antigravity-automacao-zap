@@ -17,6 +17,7 @@ import {
   Sparkles,
   Info,
   ShieldCheck,
+  FileText,
 } from 'lucide-react';
 
 interface ChatMessage {
@@ -25,6 +26,7 @@ interface ChatMessage {
   text?: string;
   mediaUrl?: string;
   mediaType?: string;
+  fileName?: string;
   buttons?: Array<{ id: string; displayText: string }>;
   listSections?: any[];
   timestamp: string;
@@ -235,6 +237,7 @@ export function WhatsAppSimulatorModal({
       pushBotMessage({
         mediaUrl: config.url,
         mediaType: type.replace('message.', ''),
+        fileName: config.fileName,
         text: config.caption,
       });
 
@@ -579,7 +582,23 @@ export function WhatsAppSimulatorModal({
                   {/* Prévia de Mídia */}
                   {msg.mediaUrl && (
                     <div className="mb-2 overflow-hidden rounded-lg">
-                      <img src={msg.mediaUrl} alt="Mídia" className="max-h-48 w-full object-cover" />
+                      {msg.mediaType === 'video' ? (
+                        <video controls src={msg.mediaUrl} className="max-h-48 w-full rounded-lg" />
+                      ) : msg.mediaType === 'audio' ? (
+                        <audio controls src={msg.mediaUrl} className="w-full" />
+                      ) : msg.mediaType === 'document' ? (
+                        <div className="flex items-center gap-2.5 rounded-lg border border-slate-700/60 bg-slate-900/80 p-2.5">
+                          <FileText className="h-6 w-6 text-emerald-400 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <span className="block truncate text-xs font-medium text-slate-200">
+                              {msg.fileName || 'documento.pdf'}
+                            </span>
+                            <span className="text-[10px] text-slate-400">Documento anexado</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <img src={msg.mediaUrl} alt="Mídia" className="max-h-48 w-full object-cover" />
+                      )}
                     </div>
                   )}
 

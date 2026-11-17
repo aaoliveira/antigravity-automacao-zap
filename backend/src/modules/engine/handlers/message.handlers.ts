@@ -110,22 +110,28 @@ export class MessageAudioHandler implements WorkflowNodeHandler {
 export class MessageDocumentHandler implements WorkflowNodeHandler {
   readonly type = ['message.document'];
 
+  constructor(private readonly variableResolver: VariableResolverService) {}
+
   async execute(context: NodeExecutionContext): Promise<NodeResult> {
     const mediaUrl = context.node.config?.mediaUrl || context.node.config?.url || '';
-    const fileName = context.node.config?.fileName || 'documento.pdf';
+    const rawFileName = context.node.config?.fileName || 'documento.pdf';
+    const fileName = this.variableResolver.interpolate(rawFileName, context.variables);
+    const rawCaption = context.node.config?.caption || '';
+    const caption = this.variableResolver.interpolate(rawCaption, context.variables);
 
     if (context.outboxMessage) {
       await context.outboxMessage('media', context.variables.contact.phone, {
         mediaType: 'document',
         mediaUrl,
         fileName,
+        caption,
       });
     }
 
     return {
       success: true,
       nextHandle: 'default',
-      outputPayload: { mediaType: 'document', mediaUrl, fileName },
+      outputPayload: { mediaType: 'document', mediaUrl, fileName, caption },
     };
   }
 }

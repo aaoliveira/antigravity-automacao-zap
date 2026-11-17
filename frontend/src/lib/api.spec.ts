@@ -118,4 +118,28 @@ describe('FlowApi Client', () => {
     expect(result.success).toBe(true);
     expect(apiClient.delete).toHaveBeenCalledWith('/automations/flow-123');
   });
+
+  it('deve fazer upload de arquivo de mídia chamando POST /automations/media/upload', async () => {
+    const mockFile = new File(['conteudo teste'], 'manual.pdf', { type: 'application/pdf' });
+    const mockUploadResponse = {
+      success: true,
+      url: 'http://localhost:3000/uploads/tenant/manual.pdf',
+      relativeUrl: '/uploads/tenant/manual.pdf',
+      fileName: 'manual.pdf',
+      mimetype: 'application/pdf',
+      size: 14,
+      mediaType: 'document',
+    };
+    (apiClient.post as jest.Mock).mockResolvedValueOnce({ data: mockUploadResponse });
+
+    const result = await FlowApi.uploadMedia(mockFile);
+    expect(result).toEqual(mockUploadResponse);
+    expect(apiClient.post).toHaveBeenCalledWith(
+      '/automations/media/upload',
+      expect.any(FormData),
+      expect.objectContaining({
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }),
+    );
+  });
 });

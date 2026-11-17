@@ -388,4 +388,83 @@ describe('AutomationsService (Unit Tests)', () => {
       expect(prismaMock.automationTrigger.create).toHaveBeenCalled();
     });
   });
+
+  describe('handleMediaUpload', () => {
+    it('deve processar upload de imagem e mapear mediatype "image"', () => {
+      const mockFile: any = {
+        originalname: 'foto-produto.png',
+        filename: '123456-foto-produto.png',
+        mimetype: 'image/png',
+        size: 204800,
+      };
+      const mockReq: any = {
+        protocol: 'http',
+        get: jest.fn().mockReturnValue('localhost:3000'),
+      };
+
+      const result = service.handleMediaUpload(tenantA, mockFile, mockReq);
+
+      expect(result.success).toBe(true);
+      expect(result.mediaType).toBe('image');
+      expect(result.fileName).toBe('foto-produto.png');
+      expect(result.relativeUrl).toBe(`/uploads/${tenantA}/123456-foto-produto.png`);
+      expect(result.url).toBe(`http://localhost:3000/uploads/${tenantA}/123456-foto-produto.png`);
+    });
+
+    it('deve processar upload de documento PDF e mapear mediatype "document"', () => {
+      const mockFile: any = {
+        originalname: 'proposta.pdf',
+        filename: '987654-proposta.pdf',
+        mimetype: 'application/pdf',
+        size: 512000,
+      };
+      const mockReq: any = {
+        protocol: 'https',
+        get: jest.fn().mockReturnValue('api.meudominio.com'),
+      };
+
+      const result = service.handleMediaUpload(tenantA, mockFile, mockReq);
+
+      expect(result.success).toBe(true);
+      expect(result.mediaType).toBe('document');
+      expect(result.fileName).toBe('proposta.pdf');
+      expect(result.url).toBe(`https://api.meudominio.com/uploads/${tenantA}/987654-proposta.pdf`);
+    });
+
+    it('deve processar upload de áudio e mapear mediatype "audio"', () => {
+      const mockFile: any = {
+        originalname: 'audio.ogg',
+        filename: '111-audio.ogg',
+        mimetype: 'audio/ogg',
+        size: 10240,
+      };
+      const mockReq: any = {
+        protocol: 'http',
+        get: jest.fn().mockReturnValue('localhost:3000'),
+      };
+
+      const result = service.handleMediaUpload(tenantA, mockFile, mockReq);
+
+      expect(result.success).toBe(true);
+      expect(result.mediaType).toBe('audio');
+    });
+
+    it('deve processar upload de vídeo e mapear mediatype "video"', () => {
+      const mockFile: any = {
+        originalname: 'video.mp4',
+        filename: '222-video.mp4',
+        mimetype: 'video/mp4',
+        size: 1048576,
+      };
+      const mockReq: any = {
+        protocol: 'http',
+        get: jest.fn().mockReturnValue('localhost:3000'),
+      };
+
+      const result = service.handleMediaUpload(tenantA, mockFile, mockReq);
+
+      expect(result.success).toBe(true);
+      expect(result.mediaType).toBe('video');
+    });
+  });
 });

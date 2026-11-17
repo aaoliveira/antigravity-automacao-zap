@@ -73,6 +73,37 @@ export const FlowApi = {
     return res.data;
   },
 
+  // Upload de Mídia (Recomendado Evolution API: Hospedagem com URL acessível)
+  async uploadMedia(
+    file: File,
+    onProgress?: (percent: number) => void,
+  ): Promise<{
+    success: boolean;
+    url: string;
+    relativeUrl: string;
+    fileName: string;
+    mimetype: string;
+    size: number;
+    mediaType: 'image' | 'video' | 'audio' | 'document';
+  }> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const res = await apiClient.post('/automations/media/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      onUploadProgress: (progressEvent) => {
+        if (progressEvent.total && onProgress) {
+          const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress(percent);
+        }
+      },
+    });
+
+    return res.data;
+  },
+
   async validateFlow(id: string, definition?: WorkflowDefinition): Promise<FlowValidationResult> {
     const res = await apiClient.post<FlowValidationResult>(`/automations/${id}/validate`, {
       definition,

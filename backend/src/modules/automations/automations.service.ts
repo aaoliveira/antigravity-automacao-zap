@@ -406,6 +406,40 @@ export class AutomationsService {
   }
 
   /**
+   * Processa arquivo enviado e gera URL canônica e metadados para envio via Evolution API
+   */
+  handleMediaUpload(tenantId: string, file: Express.Multer.File, req: any) {
+    const baseUrl = process.env.PUBLIC_APP_URL || `${req.protocol}://${req.get('host')}`;
+    const relativeUrl = `/uploads/${tenantId}/${file.filename}`;
+    const fileUrl = `${baseUrl}${relativeUrl}`;
+
+    let mediaType: 'image' | 'video' | 'audio' | 'document' = 'document';
+    const mime = (file.mimetype || '').toLowerCase();
+
+    if (mime.startsWith('image/')) {
+      mediaType = 'image';
+    } else if (mime.startsWith('video/')) {
+      mediaType = 'video';
+    } else if (mime.startsWith('audio/')) {
+      mediaType = 'audio';
+    }
+
+    this.logger.log(
+      `Upload de mídia realizado: [Tenant: ${tenantId}] ${file.originalname} (${file.size} bytes, tipo: ${mediaType}) -> ${fileUrl}`,
+    );
+
+    return {
+      success: true,
+      url: fileUrl,
+      relativeUrl,
+      fileName: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size,
+      mediaType,
+    };
+  }
+
+  /**
    * Consulta histórico de versões
    */
   async getVersions(tenantId: string, id: string) {
